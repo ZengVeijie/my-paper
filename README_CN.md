@@ -1,4 +1,4 @@
-# My Paper（平静之心）
+# My Paper
 
 > [English](README.md)
 
