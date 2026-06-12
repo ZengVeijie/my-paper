@@ -1,5 +1,7 @@
 # My Paper
 
+> [中文文档](README_CN.md)
+
 A lightweight, self-hosted personal diary and writing platform. Flat-file storage, no database required.
 
 ## Features
