@@ -34,9 +34,6 @@ A lightweight, self-hosted personal diary and writing platform. Flat-file storag
 ### Internal (Community)
 ![Internal](public/img/screenshots/站内页.png)
 
-### Collections
-![Collections](public/img/screenshots/合辑页.png)
-
 ### Insights
 ![Insights](public/img/screenshots/洞见分析页.png)
 

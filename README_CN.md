@@ -34,9 +34,6 @@
 ### 站内
 ![站内](public/img/screenshots/站内页.png)
 
-### 合辑
-![合辑](public/img/screenshots/合辑页.png)
-
 ### 洞见分析
 ![洞见分析](public/img/screenshots/洞见分析页.png)
 
