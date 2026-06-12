@@ -20,6 +20,35 @@
 - **草稿** — 服务端每 30 秒自动保存
 - **移动端适配** — 响应式设计，移动端标签切换
 
+## 界面展示
+
+### 首页
+![首页](public/img/screenshots/首页.png)
+
+### 编辑器
+![编辑器](public/img/screenshots/文章编辑页.png)
+
+### 文章内容
+![文章内容](public/img/screenshots/文章内容页.png)
+
+### 站内
+![站内](public/img/screenshots/站内页.png)
+
+### 合辑
+![合辑](public/img/screenshots/合辑页.png)
+
+### 洞见分析
+![洞见分析](public/img/screenshots/洞见分析页.png)
+
+### 导出
+![导出](public/img/screenshots/书本导出.png)
+
+### 设置
+![设置](public/img/screenshots/设置页.png)
+
+### 用户管理
+![用户管理](public/img/screenshots/用户管理页.png)
+
 ## 环境要求
 
 - PHP 7.4 或更高版本

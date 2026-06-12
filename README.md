@@ -20,6 +20,35 @@ A lightweight, self-hosted personal diary and writing platform. Flat-file storag
 - **Drafts** — Server-side auto-save every 30 seconds
 - **Mobile-friendly** — Responsive design with mobile tab switching
 
+## Screenshots
+
+### Home
+![Home](public/img/screenshots/首页.png)
+
+### Editor
+![Editor](public/img/screenshots/文章编辑页.png)
+
+### Article
+![Article](public/img/screenshots/文章内容页.png)
+
+### Internal (Community)
+![Internal](public/img/screenshots/站内页.png)
+
+### Collections
+![Collections](public/img/screenshots/合辑页.png)
+
+### Insights
+![Insights](public/img/screenshots/洞见分析页.png)
+
+### Export
+![Export](public/img/screenshots/书本导出.png)
+
+### Settings
+![Settings](public/img/screenshots/设置页.png)
+
+### User Management
+![User Management](public/img/screenshots/用户管理页.png)
+
 ## Requirements
 
 - PHP 7.4 or higher
