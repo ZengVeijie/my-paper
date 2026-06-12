@@ -1,0 +1,273 @@
+<?php $user = current_user(); ?>
+<div class="page-header">
+    <h1>设置</h1>
+</div>
+
+<div class="admin-tabs">
+    <button class="tab-btn active" onclick="switchSettingsTab('profile', event)">个人设置</button>
+    <button class="tab-btn" onclick="switchSettingsTab('assistant', event)">助手管理</button>
+    <button class="tab-btn" onclick="switchSettingsTab('data', event)">数据管理</button>
+    <button class="tab-btn" onclick="switchSettingsTab('shares', event)">分享管理</button>
+</div>
+
+<!-- 个人设置 -->
+<div class="admin-panel" id="settings-profile">
+    <section class="settings-section">
+        <h2>个人信息</h2>
+        <form id="profile-form" onsubmit="updateProfile(event)">
+            <label class="field">
+                <span>用户名</span>
+                <input type="text" value="<?= h($user['username']) ?>" disabled>
+                <span class="field-hint">用户名不可修改</span>
+            </label>
+            <label class="field">
+                <span>显示名称</span>
+                <input type="text" name="display_name" value="<?= h($user['display_name'] ?? '') ?>">
+            </label>
+            <button type="submit" class="btn btn-primary">保存</button>
+        </form>
+    </section>
+
+    <section class="settings-section">
+        <h2>修改密码</h2>
+        <form id="password-form" onsubmit="updatePassword(event)">
+            <label class="field">
+                <span>当前密码</span>
+                <input type="password" name="current_password" required>
+            </label>
+            <label class="field">
+                <span>新密码</span>
+                <input type="password" name="new_password" required minlength="6">
+            </label>
+            <button type="submit" class="btn btn-primary">修改密码</button>
+        </form>
+    </section>
+
+</div>
+
+<!-- 助手管理 -->
+<div class="admin-panel" id="settings-assistant" style="display:none">
+    <section class="settings-section">
+        <h2>DeepSeek API</h2>
+        <form id="apikey-form" onsubmit="updateApiKey(event)">
+            <label class="field">
+                <span>个人 API Key</span>
+                <input type="password" name="deepseek_api_key" value="<?= h($user['deepseek_api_key'] ?? '') ?>" placeholder="留空则使用全局配置">
+                <span class="field-hint">你的 Key 优先级高于全局配置</span>
+            </label>
+            <label class="field">
+                <span>AI 最大输出长度</span>
+                <input type="number" name="ai_max_tokens" value="<?= h($user['ai_max_tokens'] ?? '') ?>" placeholder="留空使用默认（推荐 2048-4096）" min="64" max="16384" step="64" style="max-width:240px;">
+                <span class="field-hint">控制 AI 每次回复的最大长度，越大回答越完整但消耗 token 越多。范围 64-16384</span>
+            </label>
+            <button type="submit" class="btn btn-primary">保存</button>
+        </form>
+    </section>
+
+    <section class="settings-section">
+        <h2>AI 自定义模板</h2>
+        <p class="section-desc">创建常用的 AI 指令模板，在编辑器中一键调用。提示词中请用 <code>{{text}}</code> 作为文字占位符。</p>
+        <div id="template-list" style="margin-bottom:16px;">
+            <p style="color:var(--text-muted);font-size:0.85rem;">加载中...</p>
+        </div>
+        <form id="template-form" onsubmit="saveTemplate(event)" style="border:1px solid var(--border);border-radius:var(--radius);padding:12px;background:var(--bg);">
+            <input type="hidden" id="tpl-edit-id">
+            <label class="field">
+                <span>模板名称</span>
+                <input type="text" id="tpl-name" placeholder="如：鲁迅风格" required>
+            </label>
+            <label class="field">
+                <span>提示词</span>
+                <textarea id="tpl-prompt" rows="2" placeholder="如：用鲁迅的文风改写以下文字：{{text}}" required style="font-family:var(--font-ui);font-size:0.85rem;"></textarea>
+            </label>
+            <div style="display:flex;gap:8px;">
+                <button type="submit" class="btn btn-primary btn-sm" id="tpl-submit-btn">添加模板</button>
+                <button type="button" class="btn btn-sm" id="tpl-cancel-btn" style="display:none;" onclick="cancelEditTemplate()">取消编辑</button>
+            </div>
+        </form>
+    </section>
+</div>
+
+<!-- 数据管理 -->
+<div class="admin-panel" id="settings-data" style="display:none">
+    <section class="settings-section">
+        <h2>数据导出</h2>
+        <p class="section-desc">导出你的数据为 Markdown 或 ZIP 包</p>
+        <div class="export-actions">
+            <a href="#" class="btn" onclick="exportAllData();return false">导出全部数据 (ZIP)</a>
+            <span class="field-hint" style="margin-left:8px;">文章列表中可多选批量导出</span>
+        </div>
+    </section>
+</div>
+
+<!-- 分享管理 -->
+<div class="admin-panel" id="settings-shares" style="display:none">
+    <section class="settings-section">
+        <h2>我的分享</h2>
+        <p class="section-desc">管理你创建的分享链接</p>
+        <div id="share-list" style="margin-top:12px;">
+            <p style="color:var(--text-muted);font-size:0.85rem;">加载中...</p>
+        </div>
+    </section>
+</div>
+
+<script>
+let sharesLoaded = false, templatesLoaded = false;
+function switchSettingsTab(name, ev) {
+    document.querySelectorAll('.admin-panel').forEach(p => p.style.display = 'none');
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('settings-' + name).style.display = '';
+    ev.target.classList.add('active');
+    if (name === 'shares' && !sharesLoaded) { sharesLoaded = true; loadShares(); }
+    if (name === 'assistant' && !templatesLoaded) { templatesLoaded = true; loadTemplates(); }
+}
+async function loadShares() {
+    try {
+        const resp = await fetch('/api/shares', {headers:{'X-Requested-With':'XMLHttpRequest'}});
+        const shares = await resp.json();
+        const el = document.getElementById('share-list');
+        if (!shares.length) { el.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">暂无分享链接</p>'; return; }
+        el.innerHTML = shares.map(s => {
+            const expired = s.expires_at && new Date(s.expires_at) < new Date();
+            const created = s.created_at ? new Date(s.created_at).toLocaleDateString('zh-CN') : '';
+            const expires = s.expires_at ? new Date(s.expires_at).toLocaleDateString('zh-CN') : '';
+            const dateRange = created && expires ? `${created} ~ ${expires}` : (created ? `${created} 起` : '');
+            const titles = (s.target_titles || []).map(t => esc(t)).join(', ');
+            return `<div style="padding:10px 0;border-bottom:1px solid var(--border-light);">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <a href="/share/${esc(s.code)}" target="_blank" style="font-family:var(--font-ui);font-size:0.85rem;font-weight:500;">/share/${esc(s.code)}</a>
+                    <button class="btn-text btn-danger" onclick="revokeShare('${s.code}')">撤销</button>
+                </div>
+                <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;line-height:1.5;">
+                    ${titles ? '<div>文章：' + titles + '</div>' : ''}
+                    ${dateRange ? '<div>有效期：' + dateRange + '</div>' : '<div>永久有效</div>'}
+                    <span style="margin-right:6px;">${s.type==='collection'?'合辑':''} ${s.target_ids.length}篇</span>
+                    ${s.password_hash ? '<span style="margin-right:6px;color:var(--accent);">密码保护</span>' : ''}
+                    ${expired ? '<span style="color:var(--danger);">已过期</span>' : ''}
+                </div>
+            </div>`;
+        }).join('');
+    } catch(e) { console.error(e); }
+}
+async function revokeShare(code) {
+    if (!confirm('确定撤销此分享链接？')) return;
+    try {
+        const resp = await fetch('/api/share/'+code, {method:'DELETE',headers:{'X-Requested-With':'XMLHttpRequest'}});
+        const r = await resp.json();
+        if (r.ok) loadShares();
+        else alert(r.error||'撤销失败');
+    } catch(e) { alert('撤销失败'); }
+}
+
+// ===== AI 模板管理 =====
+async function loadTemplates() {
+    try {
+        const resp = await fetch('/api/ai/templates', {headers:{'X-Requested-With':'XMLHttpRequest'}});
+        const templates = await resp.json();
+        const el = document.getElementById('template-list');
+        if (!templates.length) { el.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">暂无自定义模板</p>'; return; }
+        allTemplates = templates;
+        el.innerHTML = templates.map(t =>
+            `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border-light);gap:12px;">
+                <div style="min-width:0;flex:1;">
+                    <div style="font-weight:500;font-size:0.85rem;">${esc(t.name)}</div>
+                    <div style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(t.prompt)}</div>
+                </div>
+                <div style="display:flex;gap:2px;flex-shrink:0;">
+                    <button class="btn-text" onclick="editTemplate('${t.id}')">编辑</button>
+                    <button class="btn-text btn-danger" onclick="deleteTemplate('${t.id}')">删除</button>
+                </div>
+            </div>`
+        ).join('');
+    } catch(e) { console.error(e); }
+}
+let allTemplates = [];
+let tplEditId = null;
+
+function saveTemplate(ev) {
+    ev.preventDefault();
+    if (tplEditId) updateTemplate(tplEditId);
+    else createTemplate();
+}
+
+async function createTemplate() {
+    const name = document.getElementById('tpl-name').value.trim();
+    const prompt = document.getElementById('tpl-prompt').value.trim();
+    if (!name || !prompt) return;
+    try {
+        const resp = await fetch('/api/ai/templates', {
+            method:'POST',
+            headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+            body: JSON.stringify({name, prompt})
+        });
+        const r = await resp.json();
+        if (r.error) { alert(r.error); return; }
+        resetTemplateForm();
+        loadTemplates();
+    } catch(e) { alert('创建失败'); }
+}
+
+function editTemplate(id) {
+    const t = allTemplates.find(t => t.id === id);
+    if (!t) return;
+    tplEditId = id;
+    document.getElementById('tpl-edit-id').value = id;
+    document.getElementById('tpl-name').value = t.name;
+    document.getElementById('tpl-prompt').value = t.prompt;
+    document.getElementById('tpl-submit-btn').textContent = '更新模板';
+    document.getElementById('tpl-cancel-btn').style.display = '';
+    document.getElementById('template-form').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function updateTemplate(id) {
+    const name = document.getElementById('tpl-name').value.trim();
+    const prompt = document.getElementById('tpl-prompt').value.trim();
+    if (!name || !prompt) return;
+    try {
+        const resp = await fetch('/api/ai/templates/' + id, {
+            method:'PUT',
+            headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+            body: JSON.stringify({name, prompt})
+        });
+        const r = await resp.json();
+        if (r.error) { alert(r.error); return; }
+        resetTemplateForm();
+        loadTemplates();
+    } catch(e) { alert('更新失败'); }
+}
+
+function cancelEditTemplate() {
+    resetTemplateForm();
+}
+
+function resetTemplateForm() {
+    tplEditId = null;
+    document.getElementById('tpl-edit-id').value = '';
+    document.getElementById('tpl-name').value = '';
+    document.getElementById('tpl-prompt').value = '';
+    document.getElementById('tpl-submit-btn').textContent = '添加模板';
+    document.getElementById('tpl-cancel-btn').style.display = 'none';
+}
+
+async function exportAllData() {
+    showLoading('正在生成下载文件...');
+    try {
+        const resp = await fetch('/api/export/all');
+        const data = await resp.json();
+        if (!data.url) { hideLoading(); showToast(data.error || '导出失败', 'error'); return; }
+        downloadFile(data.url, 'My_Paper_export.zip');
+    } catch(e) {
+        hideLoading();
+        showToast('导出失败: ' + e.message, 'error');
+    }
+}
+
+async function deleteTemplate(id) {
+    if (!confirm('确定删除此模板？')) return;
+    try {
+        await fetch('/api/ai/templates/'+id, {method:'DELETE',headers:{'X-Requested-With':'XMLHttpRequest'}});
+        cancelEditTemplate();
+        loadTemplates();
+    } catch(e) { alert('删除失败'); }
+}
+</script>

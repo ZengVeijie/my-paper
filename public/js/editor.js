@@ -1,0 +1,1562 @@
+/**
+ * My Paper - 编辑器 & AI 助手
+ */
+
+document.addEventListener('DOMContentLoaded', () => {
+    initEditor();
+    initAI();
+    initUpload();
+    initMobileEditor();
+    initArticleRef();
+});
+
+// ===== 移动端编辑器标签切换 =====
+
+function initMobileEditor() {
+    const isMobile = window.innerWidth <= 768;
+
+    // 元数据折叠
+    const metaToggle = document.getElementById('meta-toggle');
+    const metaInner = document.getElementById('meta-fields-inner');
+    if (metaToggle && metaInner) {
+        if (isMobile) metaInner.style.display = 'none';
+        metaToggle.addEventListener('click', () => {
+            const visible = metaInner.style.display !== 'none';
+            metaInner.style.display = visible ? 'none' : '';
+            metaToggle.querySelector('.meta-toggle-arrow').textContent = visible ? '▾' : '▴';
+        });
+    }
+
+    // 标签切换（底部栏）
+    const allTabs = document.querySelectorAll('.meb-tab');
+    const panels = {
+        editor: document.getElementById('editor-pane'),
+        preview: document.getElementById('preview-pane'),
+        ai: document.getElementById('ai-panel')
+    };
+
+    function switchMobileTab(tabName) {
+        // 隐藏所有面板
+        Object.entries(panels).forEach(([name, p]) => {
+            if (!p) return;
+            p.style.display = 'none';
+        });
+        // 显示目标面板，使用合适的 display 值
+        const active = panels[tabName];
+        if (active) {
+            active.style.display = (tabName === 'preview') ? 'block' : 'flex';
+        }
+
+        // 同步所有标签状态
+        allTabs.forEach(t => {
+            t.classList.toggle('active', t.dataset.tab === tabName);
+        });
+
+        // 切换到预览时触发渲染
+        if (tabName === 'preview') {
+            const textarea = document.getElementById('article-content');
+            const preview = document.getElementById('preview-pane');
+            const previewEmpty = document.getElementById('preview-empty');
+            if (textarea && preview && typeof marked !== 'undefined') {
+                if (textarea.value.trim()) {
+                    if (previewEmpty) previewEmpty.style.display = 'none';
+                    preview.innerHTML = marked.parse(textarea.value);
+                } else {
+                    if (previewEmpty) previewEmpty.style.display = '';
+                    preview.innerHTML = '';
+                }
+            }
+        }
+    }
+
+    allTabs.forEach(tab => {
+        tab.addEventListener('click', () => switchMobileTab(tab.dataset.tab));
+    });
+
+    // 初始状态
+    if (isMobile) {
+        switchMobileTab('editor');
+        if (metaFields) metaFields.style.display = 'none';
+    }
+
+    // 窗口尺寸变化时重置
+    window.addEventListener('resize', () => {
+        const nowMobile = window.innerWidth <= 768;
+        if (!nowMobile) {
+            // 恢复桌面端所有面板
+            Object.entries(panels).forEach(([name, p]) => {
+                if (!p) return;
+                p.style.display = (name === 'preview') ? 'block' : 'flex';
+            });
+            if (metaFields) metaFields.style.display = '';
+        } else {
+            // 切换回移动端时恢复当前活动标签
+            const activeTab = document.querySelector('.meb-tab.active');
+            if (activeTab) switchMobileTab(activeTab.dataset.tab);
+            else switchMobileTab('editor');
+            if (metaFields) metaFields.style.display = 'none';
+        }
+        initResizeHandles();
+    });
+}
+
+// ===== 编辑器 =====
+
+let editorAutoSaveTimer;
+let editorDirty = false;
+let lastAutoSaveContent = '';
+
+function initEditor() {
+    const textarea = document.getElementById('article-content');
+    const preview = document.getElementById('preview-pane');
+    const previewEmpty = document.getElementById('preview-empty');
+
+    if (!textarea || !preview) return;
+
+    // 离开编辑器时保存选中范围，以便 AI 操作能获取选中文字
+    textarea.addEventListener('blur', () => {
+        savedSelStart = textarea.selectionStart;
+        savedSelEnd = textarea.selectionEnd;
+    });
+
+    // 实时预览
+    function updatePreview() {
+        const md = textarea.value;
+        if (md.trim() && typeof marked !== 'undefined') {
+            if (previewEmpty) previewEmpty.style.display = 'none';
+            preview.innerHTML = marked.parse(md);
+        } else if (md.trim()) {
+            if (previewEmpty) previewEmpty.style.display = 'none';
+            preview.innerHTML = '<p style="color:var(--text-muted)">Markdown 渲染库加载中...</p>';
+        } else {
+            if (previewEmpty) previewEmpty.style.display = '';
+        }
+    }
+
+    textarea.addEventListener('input', () => { editorDirty = true; updatePreview(); });
+    updatePreview();
+
+    // Tab 键支持
+    textarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            textarea.value = textarea.value.substring(0, start) + '    ' + textarea.value.substring(end);
+            textarea.selectionStart = textarea.selectionEnd = start + 4;
+        }
+    });
+
+    // 工具栏
+    document.querySelectorAll('#editor-toolbar button[data-action]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const action = btn.dataset.action;
+            toolbarAction(textarea, action);
+            updatePreview();
+            textarea.focus();
+        });
+    });
+
+    // 裁剪按钮
+    const cropBtn = document.getElementById('crop-btn');
+    if (cropBtn) {
+        cropBtn.addEventListener('click', openCropModal);
+    }
+
+    // ===== 草稿恢复 & 自动保存 =====
+    restoreDraft();
+
+    // 服务器端自动保存：每30秒检测一次变更
+    setInterval(() => {
+        const content = textarea.value;
+        if (editorDirty && content !== lastAutoSaveContent) {
+            saveDraft();
+            lastAutoSaveContent = content;
+            editorDirty = false;
+        }
+    }, 30000);
+
+    // 页面离开前保存
+    window.addEventListener('beforeunload', () => saveDraft());
+}
+
+async function restoreDraft() {
+    try {
+        const resp = await fetch('/api/drafts', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        const draft = await resp.json();
+        const isEdit = typeof window.isEdit !== 'undefined' && window.isEdit;
+        const articleId = typeof window.articleId !== 'undefined' ? window.articleId : '';
+
+        // 编辑模式下只恢复匹配的草稿；新建模式下恢复任何草稿
+        const matches = !draft.article_id || (isEdit && draft.article_id === articleId) || (!isEdit && !draft.article_id);
+        if (!matches || !draft.content) return;
+
+        const textarea = document.getElementById('article-content');
+        const titleEl = document.getElementById('article-title');
+
+        // 如果编辑器已有内容（PHP 预填的），不覆盖
+        if (textarea.value.trim() || titleEl.value.trim()) return;
+
+        if (confirm('检测到服务器端未保存的草稿（' + formatDate(draft.updated_at) + '），是否恢复？')) {
+            textarea.value = draft.content || '';
+            titleEl.value = draft.title || '';
+            document.getElementById('article-summary').value = draft.summary || '';
+            document.getElementById('article-tags').value = (draft.tags || []).join(',');
+            document.getElementById('article-visibility').value = draft.visibility || 'private';
+            textarea.dispatchEvent(new Event('input'));
+        } else {
+            await fetch('/api/drafts', { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        }
+        lastAutoSaveContent = textarea.value;
+    } catch (e) { /* 静默处理 */ }
+}
+
+async function saveDraft() {
+    const isEdit = typeof window.isEdit !== 'undefined' && window.isEdit;
+    const articleId = typeof window.articleId !== 'undefined' ? window.articleId : '';
+
+    const data = {
+        article_id: isEdit ? articleId : '',
+        title: document.getElementById('article-title')?.value || '',
+        content: document.getElementById('article-content')?.value || '',
+        summary: document.getElementById('article-summary')?.value || '',
+        tags: (document.getElementById('article-tags')?.value || '').split(',').map(t => t.trim()).filter(Boolean),
+        visibility: document.getElementById('article-visibility')?.value || 'private',
+    };
+
+    try {
+        await fetch('/api/drafts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify(data)
+        });
+    } catch (e) { /* 静默处理 */ }
+}
+
+function insertAtCursor(textarea, text) {
+    const start = textarea.selectionStart;
+    textarea.value = textarea.value.substring(0, start) + text + textarea.value.substring(textarea.selectionEnd);
+    textarea.selectionStart = textarea.selectionEnd = start + text.length;
+    textarea.dispatchEvent(new Event('input'));
+    textarea.focus();
+}
+
+function toolbarAction(textarea, action) {
+    const sel = textarea.value.substring(textarea.selectionStart, textarea.selectionEnd);
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    let before = '', after = '';
+
+    switch (action) {
+        case 'heading': before = '\n## '; break;
+        case 'bold': before = '**'; after = '**'; break;
+        case 'italic': before = '*'; after = '*'; break;
+        case 'strikethrough': before = '~~'; after = '~~'; break;
+        case 'quote': before = '\n> '; break;
+        case 'ul': before = '\n- '; break;
+        case 'ol': before = '\n1. '; break;
+        case 'link': before = '['; after = '](url)'; break;
+        case 'image':
+            const imgUrl = prompt('请输入图片 URL：');
+            if (!imgUrl) return;
+            const imgWidth = prompt('图片宽度（可选，如 400，留空则使用原始大小）：');
+            if (imgWidth && /^\d+$/.test(imgWidth.trim())) {
+                insertAtCursor(textarea, '<img src="' + imgUrl + '" alt="" width="' + imgWidth.trim() + '">');
+            } else {
+                insertAtCursor(textarea, '![](' + imgUrl + ')');
+            }
+            return;
+        case 'code': before = '\n```\n'; after = '\n```\n'; break;
+        case 'table':
+            const rows = parseInt(prompt('表格行数：', '3'));
+            if (!rows || rows < 1) return;
+            const cols = parseInt(prompt('表格列数：', '3'));
+            if (!cols || cols < 1) return;
+            let tableMd = '\n| ' + Array(cols).fill('  标题').join(' | ') + ' |\n';
+            tableMd += '| ' + Array(cols).fill(' --- ').join(' | ') + ' |\n';
+            for (let r = 1; r < rows; r++) {
+                tableMd += '| ' + Array(cols).fill('  内容').join(' | ') + ' |\n';
+            }
+            insertAtCursor(textarea, tableMd);
+            return;
+        case 'hr': before = '\n---\n'; break;
+        case 'indent': before = '　　'; break;
+    }
+
+    const replacement = before + sel + after;
+    textarea.value = textarea.value.substring(0, start) + replacement + textarea.value.substring(end);
+
+    if (!sel && before && after) {
+        // Place cursor between before and after
+        textarea.selectionStart = textarea.selectionEnd = start + before.length;
+    } else {
+        textarea.selectionStart = textarea.selectionEnd = start + replacement.length;
+    }
+}
+
+// ===== 保存文章 =====
+
+function gatherArticleData() {
+    const title = document.getElementById('article-title').value.trim();
+    const content = document.getElementById('article-content').value;
+    const summary = document.getElementById('article-summary').value.trim();
+    const tagsStr = document.getElementById('article-tags').value;
+    const visibility = document.getElementById('article-visibility').value;
+    const sentimentEl = document.getElementById('article-sentiment');
+    const tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(Boolean) : [];
+    const data = { title: title || '无标题', content, summary, tags, visibility };
+    if (sentimentEl && sentimentEl.value) {
+        data.sentiment = { mood: sentimentEl.value, source: 'manual', intensity: 5, keywords: [] };
+    }
+    return data;
+}
+
+async function clearDraftAndGo(id) {
+    try { await fetch('/api/drafts', { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest' } }); } catch (e) {}
+    window.location.href = (window.basePath || '') + '/article/' + id;
+}
+
+// 保存：新建时创建文章，编辑时覆盖原文章。保存后跳转到阅读页。
+async function saveArticle() {
+    const data = gatherArticleData();
+    const isEdit = typeof window.isEdit !== 'undefined' && window.isEdit;
+    const articleId = typeof window.articleId !== 'undefined' ? window.articleId : '';
+
+    const url = isEdit ? '/api/articles/' + articleId : '/api/articles';
+    const method = isEdit ? 'PUT' : 'POST';
+
+    try {
+        const resp = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify(data)
+        });
+        const result = await resp.json();
+        if (result.id) {
+            clearDraftAndGo(result.id);
+        } else {
+            alert(result.error || '保存失败');
+        }
+    } catch (err) {
+        alert('保存失败: ' + err.message);
+    }
+}
+
+// 另存为：始终创建新文章，原文章不变。保存后跳转到新文章的阅读页。
+async function saveAsArticle() {
+    const data = gatherArticleData();
+
+    try {
+        const resp = await fetch('/api/articles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify(data)
+        });
+        const result = await resp.json();
+        if (result.id) {
+            clearDraftAndGo(result.id);
+        } else {
+            alert(result.error || '创建失败');
+        }
+    } catch (err) {
+        alert('创建失败: ' + err.message);
+    }
+}
+
+// ===== 文件上传 =====
+
+async function uploadFiles(files) {
+    const textarea = document.getElementById('article-content');
+    if (!files.length || !textarea) return;
+
+    const pos = textarea.selectionStart;
+    let inserted = '';
+
+    for (const file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const resp = await fetch('/api/upload', {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: formData
+            });
+            const result = await resp.json();
+            if (result.url) {
+                const url = (window.basePath || '') + result.url;
+                const isImage = file.type.startsWith('image/');
+                if (isImage) {
+                    const w = prompt('图片宽度（可选，如 400，留空则使用原始大小）：');
+                    if (w && /^\d+$/.test(w.trim())) {
+                        inserted += `<img src="${url}" alt="${file.name}" width="${w.trim()}">\n`;
+                    } else {
+                        inserted += `![${file.name}](${url})\n`;
+                    }
+                } else {
+                    inserted += `[${file.name}](${url})\n`;
+                }
+            } else if (result.error) {
+                alert(result.error);
+            }
+        } catch (err) {
+            alert('上传失败: ' + err.message);
+        }
+    }
+
+    if (inserted) {
+        textarea.value = textarea.value.substring(0, pos) + inserted + textarea.value.substring(pos);
+        textarea.dispatchEvent(new Event('input'));
+    }
+}
+
+function initUpload() {
+    const uploadBtn = document.getElementById('upload-btn');
+    const mebUpload = document.getElementById('meb-upload');
+    const fileInput = document.getElementById('file-input');
+    const textarea = document.getElementById('article-content');
+    const editorPane = document.getElementById('editor-pane');
+    if (!fileInput) return;
+
+    if (uploadBtn) uploadBtn.addEventListener('click', () => fileInput.click());
+    if (mebUpload) mebUpload.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', async () => {
+        await uploadFiles(Array.from(fileInput.files));
+        fileInput.value = '';
+    });
+
+    // 拖拽上传：编辑器面板范围
+    if (editorPane) {
+        let dragCounter = 0;
+        editorPane.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            dragCounter++;
+            editorPane.classList.add('drag-over');
+        });
+        editorPane.addEventListener('dragleave', () => {
+            dragCounter--;
+            if (dragCounter <= 0) {
+                dragCounter = 0;
+                editorPane.classList.remove('drag-over');
+            }
+        });
+        editorPane.addEventListener('dragover', (e) => { e.preventDefault(); });
+        editorPane.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            dragCounter = 0;
+            editorPane.classList.remove('drag-over');
+            // Track cursor position in textarea at drop point
+            if (e.target === textarea) {
+                // The drop happened directly on textarea; cursor position is set by browser
+            }
+            await uploadFiles(Array.from(e.dataTransfer.files));
+        });
+    }
+
+    // 粘贴图片（Ctrl+V）
+    textarea.addEventListener('paste', async (e) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        const imageItems = [];
+        for (const item of items) {
+            if (item.type.startsWith('image/')) {
+                imageItems.push(item.getAsFile());
+            }
+        }
+        if (imageItems.length) {
+            e.preventDefault();
+            await uploadFiles(imageItems);
+        }
+    });
+}
+
+// ===== AI 助手 =====
+
+// Track the last AI result for potential replacement
+let lastAIResult = null;
+let lastAIAction = null;
+let lastAISelection = null;
+// Persist text selection across tab switches (mobile fix)
+let savedSelStart = 0;
+let savedSelEnd = 0;
+// AI 对话历史
+let _aiHistory = [];
+
+function initAI() {
+    const panel = document.getElementById('ai-panel');
+    if (!panel) return;
+
+    const collapseBtn = document.getElementById('ai-collapse-btn');
+    const reopenBtn = document.getElementById('ai-reopen-btn');
+    const container = document.getElementById('editor-container');
+
+    function toggleAI(show) {
+        if (show) {
+            panel.classList.remove('collapsed');
+            container?.classList.add('three-col');
+            if (collapseBtn) collapseBtn.textContent = '折叠';
+            if (reopenBtn) reopenBtn.style.display = 'none';
+        } else {
+            panel.classList.add('collapsed');
+            container?.classList.remove('three-col');
+            if (collapseBtn) collapseBtn.textContent = '展开 AI 面板';
+            if (reopenBtn) reopenBtn.style.display = '';
+        }
+        initResizeHandles();
+    }
+
+    if (collapseBtn) {
+        collapseBtn.addEventListener('click', () => {
+            toggleAI(panel.classList.contains('collapsed'));
+        });
+    }
+
+    if (reopenBtn) {
+        reopenBtn.addEventListener('click', () => toggleAI(true));
+    }
+
+    toggleAI(true);
+}
+
+// ===== 可拖拽列宽调节 =====
+
+let resizeState = null;
+
+function initResizeHandles() {
+    const container = document.getElementById('editor-container');
+    const handle1 = document.getElementById('resize-handle-1');
+    const handle2 = document.getElementById('resize-handle-2');
+    const editorPane = document.getElementById('editor-pane');
+    const previewPane = document.getElementById('preview-pane');
+    const aiPanel = document.getElementById('ai-panel');
+
+    if (!container || !handle1 || !handle2 || !editorPane || !previewPane || !aiPanel) return;
+    if (!container.classList.contains('three-col')) return;
+    if (window.innerWidth <= 1024) return;
+
+    // Load saved ratios
+    const saved = JSON.parse(localStorage.getItem('editor_col_ratios') || 'null') || [4, 4, 2];
+    applyRatios(editorPane, previewPane, aiPanel, saved);
+
+    [handle1, handle2].forEach(handle => {
+        handle.style.display = '';
+        handle.onmousedown = null;
+        handle.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            const isHandle1 = handle === handle1;
+            const leftEl = isHandle1 ? editorPane : previewPane;
+            const rightEl = isHandle1 ? previewPane : aiPanel;
+
+            const containerRect = container.getBoundingClientRect();
+            const leftFlex = parseFloat(leftEl.style.flex) || (isHandle1 ? 4 : 4);
+            const rightFlex = parseFloat(rightEl.style.flex) || (isHandle1 ? 4 : 2);
+            const totalFlex = leftFlex + rightFlex;
+            const totalWidth = containerRect.width - 12; // subtract handle widths
+
+            handle.classList.add('active');
+            resizeState = { handle, leftEl, rightEl, totalFlex, totalWidth, startX: e.clientX, startLeftFlex: leftFlex, startRightFlex: rightFlex };
+        });
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!resizeState) return;
+        const { leftEl, rightEl, totalFlex, totalWidth, startX, startLeftFlex, startRightFlex } = resizeState;
+        const dx = e.clientX - startX;
+        const flexPerPx = totalFlex / totalWidth;
+        let newLeftFlex = startLeftFlex + dx * flexPerPx;
+        let newRightFlex = startRightFlex - dx * flexPerPx;
+
+        // Enforce minimum widths (200px each ≈ ~2 flex units)
+        const minFlex = 1.5;
+        if (newLeftFlex < minFlex) { newLeftFlex = minFlex; newRightFlex = totalFlex - minFlex; }
+        if (newRightFlex < minFlex) { newRightFlex = minFlex; newLeftFlex = totalFlex - minFlex; }
+
+        // Round to 1 decimal for stability
+        newLeftFlex = Math.round(newLeftFlex * 10) / 10;
+        newRightFlex = Math.round(newRightFlex * 10) / 10;
+
+        leftEl.style.flex = newLeftFlex;
+        rightEl.style.flex = newRightFlex;
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (!resizeState) return;
+        resizeState.handle.classList.remove('active');
+        const editorPane = document.getElementById('editor-pane');
+        const previewPane = document.getElementById('preview-pane');
+        const aiPanel = document.getElementById('ai-panel');
+        const ratios = [
+            Math.round((parseFloat(editorPane.style.flex) || 4) * 10) / 10,
+            Math.round((parseFloat(previewPane.style.flex) || 4) * 10) / 10,
+            Math.round((parseFloat(aiPanel.style.flex) || 2) * 10) / 10,
+        ];
+        localStorage.setItem('editor_col_ratios', JSON.stringify(ratios));
+        resizeState = null;
+    });
+}
+
+function applyRatios(editorPane, previewPane, aiPanel, ratios) {
+    editorPane.style.flex = ratios[0];
+    previewPane.style.flex = ratios[1];
+    aiPanel.style.flex = ratios[2];
+}
+
+function updateAIReference() {
+    const textarea = document.getElementById('article-content');
+    savedSelStart = textarea.selectionStart;
+    savedSelEnd = textarea.selectionEnd;
+    const sel = textarea.value.substring(savedSelStart, savedSelEnd);
+    const refEl = document.getElementById('ai-reference');
+    if (!refEl) return;
+    if (sel.trim()) {
+        refEl.innerHTML = '<span class="ref-label">已选中 ' + sel.length + ' 个字：</span><span class="ref-text">' + esc(sel.substring(0, 80)) + (sel.length > 80 ? '...' : '') + '</span>';
+        refEl.style.display = 'block';
+    } else {
+        refEl.innerHTML = '<span class="ref-label">当前操作：全文</span>';
+        refEl.style.display = 'block';
+    }
+}
+
+async function aiAction(action) {
+    const textarea = document.getElementById('article-content');
+    let selStart = textarea.selectionStart;
+    let selEnd = textarea.selectionEnd;
+    // 如果当前无选中（可能因切换标签而丢失），回退到保存的选区
+    if (selStart === selEnd && savedSelStart !== savedSelEnd) {
+        selStart = savedSelStart;
+        selEnd = savedSelEnd;
+    }
+    const sel = textarea.value.substring(selStart, selEnd);
+    const text = sel || textarea.value;
+    if (!text.trim()) { alert('请先选中文字或书写内容'); return; }
+
+    updateAIReference();
+
+    let body = { text };
+    let actionLabel = action;
+
+    if (action === 'style') {
+        const style = prompt('请选择写作风格：\n\n可选：文学优美、简洁精炼、学术严谨、随笔随性、口语化', '文学优美');
+        if (!style) return;
+        body.style = style.trim();
+        actionLabel = '风格切换（' + style.trim() + '）';
+    } else if (action === 'summary') {
+        body = { text: textarea.value };
+        actionLabel = '生成摘要';
+    } else if (action === 'polish') {
+        actionLabel = '润色';
+    } else if (action === 'translate') {
+        actionLabel = '翻译为英语';
+    } else if (action === 'explain') {
+        if (!sel) { alert('请先选中需要解释的专有名词或术语'); return; }
+        actionLabel = '名词解释';
+    } else if (action === 'format') {
+        actionLabel = 'MD 格式化';
+    }
+
+    addAIMessage('user', '[' + actionLabel + '] ' + (sel ? '处理选中文字...' : '处理全文...'));
+    addAIMessage('system', '处理中...');
+
+    lastAIAction = action;
+    lastAISelection = sel ? { start: selStart, end: selEnd } : null;
+
+    try {
+        const resp = await fetch('/api/ai/' + action, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify(body)
+        });
+        const result = await resp.json();
+
+        // Remove "处理中..." message
+        const msgs = document.querySelectorAll('#ai-messages .ai-msg.system');
+        msgs.forEach(m => { if (m.textContent === '处理中...') m.remove(); });
+
+        if (result.text || result.result) {
+            const output = result.text || result.result;
+            lastAIResult = output;
+
+            // Show result with action buttons
+            const container = document.getElementById('ai-messages');
+            const wrapper = document.createElement('div');
+            wrapper.className = 'ai-msg-wrapper';
+            wrapper.innerHTML = `
+                <div class="ai-msg assistant">${esc(output)}</div>
+                <div class="ai-msg-actions">
+                    ${(action === 'polish' || action === 'style' || action === 'translate' || action === 'format') ? `
+                        <button class="btn btn-sm btn-primary" onclick="replaceAIResult()">替换${lastAISelection ? '选中文字' : '全文'}</button>
+                        <button class="btn btn-sm" onclick="insertAIResult()">追加到文末</button>
+                    ` : ''}
+                    ${action === 'summary' ? `
+                        <button class="btn btn-sm btn-primary" onclick="applySummary()">设为摘要</button>
+                    ` : ''}
+                </div>
+            `;
+            container.appendChild(wrapper);
+            container.scrollTop = container.scrollHeight;
+        } else if (result.error) {
+            addAIMessage('system', '错误: ' + result.error);
+            lastAIResult = null;
+        }
+    } catch (err) {
+        const msgs = document.querySelectorAll('#ai-messages .ai-msg.system');
+        msgs.forEach(m => { if (m.textContent === '处理中...') m.remove(); });
+        addAIMessage('system', '请求失败: ' + err.message);
+        lastAIResult = null;
+    }
+}
+
+function replaceAIResult() {
+    if (!lastAIResult) return;
+    const textarea = document.getElementById('article-content');
+    if (lastAISelection) {
+        textarea.value = textarea.value.substring(0, lastAISelection.start) + lastAIResult + textarea.value.substring(lastAISelection.end);
+    } else {
+        textarea.value = lastAIResult;
+    }
+    textarea.dispatchEvent(new Event('input'));
+    lastAIResult = null;
+    lastAISelection = null;
+}
+
+function insertAIResult() {
+    if (!lastAIResult) return;
+    const textarea = document.getElementById('article-content');
+    textarea.value = textarea.value + '\n\n' + lastAIResult;
+    textarea.dispatchEvent(new Event('input'));
+    lastAIResult = null;
+    lastAISelection = null;
+}
+
+function applySummary() {
+    if (!lastAIResult) return;
+    document.getElementById('article-summary').value = lastAIResult;
+    lastAIResult = null;
+}
+
+async function aiChat() {
+    const input = document.getElementById('ai-input');
+    const question = input.value.trim();
+    if (!question) return;
+
+    addAIMessage('user', question);
+    _aiHistory.push({ role: 'user', content: question });
+    input.value = '';
+    addAIMessage('system', '思考中...');
+
+    const textarea = document.getElementById('article-content');
+    const articleContent = textarea ? textarea.value : '';
+
+    try {
+        const resp = await fetch('/api/ai/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ question, article_content: articleContent, history: _aiHistory.slice(0, -1) })
+        });
+        const result = await resp.json();
+        const msgs = document.querySelectorAll('#ai-messages .ai-msg.system');
+        msgs.forEach(m => { if (m.textContent === '思考中...') m.remove(); });
+
+        if (result.text || result.answer) {
+            const reply = result.text || result.answer;
+            addAIMessage('assistant', reply);
+            _aiHistory.push({ role: 'assistant', content: reply });
+        } else if (result.error) {
+            addAIMessage('system', '错误: ' + result.error);
+        }
+    } catch (err) {
+        const msgs = document.querySelectorAll('#ai-messages .ai-msg.system');
+        msgs.forEach(m => { if (m.textContent === '思考中...') m.remove(); });
+        addAIMessage('system', '请求失败: ' + err.message);
+    }
+}
+
+function addAIMessage(role, content) {
+    const container = document.getElementById('ai-messages');
+    if (!container) return;
+    const div = document.createElement('div');
+    div.className = 'ai-msg ' + role;
+    div.textContent = content;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+
+// ===== 图片裁剪 =====
+
+let cropState = {
+    img: null,
+    rect: { x: 0, y: 0, w: 0, h: 0 },
+    dragging: false,
+    resizing: false,
+    corner: '',
+    startX: 0,
+    startY: 0,
+    startRect: null,
+    scale: 1,
+};
+
+function openCropModal() {
+    document.getElementById('crop-modal').style.display = 'flex';
+    const canvas = document.getElementById('crop-canvas');
+    canvas.width = 0;
+    canvas.height = 0;
+    cropState.img = null;
+    document.getElementById('crop-file-input').value = '';
+}
+
+function closeCropModal() {
+    document.getElementById('crop-modal').style.display = 'none';
+}
+
+function loadCropImage(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+            cropState.img = img;
+
+            // Fit canvas to modal
+            const maxW = Math.min(window.innerWidth * 0.85, 800);
+            const maxH = Math.min(window.innerHeight * 0.5, 500);
+            let w = img.width, h = img.height;
+            if (w > maxW) { h = h * maxW / w; w = maxW; }
+            if (h > maxH) { w = w * maxH / h; h = maxH; }
+            cropState.scale = w / img.width;
+
+            const canvas = document.getElementById('crop-canvas');
+            canvas.width = w;
+            canvas.height = h;
+
+            // Initial crop rect: 80% of image, centered
+            const margin = 0.1;
+            cropState.rect = {
+                x: w * margin,
+                y: h * margin,
+                w: w * (1 - 2 * margin),
+                h: h * (1 - 2 * margin),
+            };
+
+            drawCropCanvas();
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+function drawCropCanvas() {
+    const canvas = document.getElementById('crop-canvas');
+    const ctx = canvas.getContext('2d');
+    const { img, rect, scale } = cropState;
+    if (!img) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw image
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    // Darken outside crop area
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0, 0, canvas.width, rect.y);
+    ctx.fillRect(0, rect.y, rect.x, rect.h);
+    ctx.fillRect(rect.x + rect.w, rect.y, canvas.width - rect.x - rect.w, rect.h);
+    ctx.fillRect(0, rect.y + rect.h, canvas.width, canvas.height - rect.y - rect.h);
+
+    // Draw crop border
+    ctx.strokeStyle = '#5b7b6f';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+
+    // Draw corner handles
+    const corners = [
+        { x: rect.x, y: rect.y },
+        { x: rect.x + rect.w, y: rect.y },
+        { x: rect.x, y: rect.y + rect.h },
+        { x: rect.x + rect.w, y: rect.y + rect.h },
+    ];
+    corners.forEach(c => {
+        ctx.fillStyle = '#fff';
+        ctx.strokeStyle = '#5b7b6f';
+        ctx.lineWidth = 1;
+        ctx.fillRect(c.x - 5, c.y - 5, 10, 10);
+        ctx.strokeRect(c.x - 5, c.y - 5, 10, 10);
+    });
+
+    // Rule of thirds lines
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 0.5;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(rect.x + rect.w / 3, rect.y); ctx.lineTo(rect.x + rect.w / 3, rect.y + rect.h);
+    ctx.moveTo(rect.x + 2 * rect.w / 3, rect.y); ctx.lineTo(rect.x + 2 * rect.w / 3, rect.y + rect.h);
+    ctx.moveTo(rect.x, rect.y + rect.h / 3); ctx.lineTo(rect.x + rect.w, rect.y + rect.h / 3);
+    ctx.moveTo(rect.x, rect.y + 2 * rect.h / 3); ctx.lineTo(rect.x + rect.w, rect.y + 2 * rect.h / 3);
+    ctx.stroke();
+    ctx.setLineDash([]);
+}
+
+// Canvas pointer handling (mouse + touch)
+document.addEventListener('DOMContentLoaded', () => {
+    const canvas = document.getElementById('crop-canvas');
+    if (!canvas) return;
+    canvas.style.touchAction = 'none';
+
+    function canvasPos(e) {
+        const rect = canvas.getBoundingClientRect();
+        return { mx: e.clientX - rect.left, my: e.clientY - rect.top };
+    }
+
+    canvas.addEventListener('pointerdown', function(e) {
+        if (!cropState.img) return;
+        canvas.setPointerCapture(e.pointerId);
+        const { mx, my } = canvasPos(e);
+        const r = cropState.rect;
+        const threshold = 12;
+
+        const corners = { nw: [r.x, r.y], ne: [r.x + r.w, r.y], sw: [r.x, r.y + r.h], se: [r.x + r.w, r.y + r.h] };
+        let hitCorner = '';
+        for (const [name, [cx, cy]] of Object.entries(corners)) {
+            if (Math.abs(mx - cx) < threshold && Math.abs(my - cy) < threshold) {
+                hitCorner = name;
+                break;
+            }
+        }
+
+        if (hitCorner) {
+            cropState.resizing = true;
+            cropState.corner = hitCorner;
+            cropState.startX = mx;
+            cropState.startY = my;
+            cropState.startRect = { ...r };
+        } else if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+            cropState.dragging = true;
+            cropState.startX = mx;
+            cropState.startY = my;
+            cropState.startRect = { ...r };
+        }
+    });
+
+    canvas.addEventListener('pointermove', function(e) {
+        const { mx, my } = canvasPos(e);
+        const r = cropState.rect;
+        const threshold = 12;
+
+        if (cropState.dragging) {
+            const dx = mx - cropState.startX;
+            const dy = my - cropState.startY;
+            const sr = cropState.startRect;
+            let nx = sr.x + dx, ny = sr.y + dy;
+            nx = Math.max(0, Math.min(nx, canvas.width - r.w));
+            ny = Math.max(0, Math.min(ny, canvas.height - r.h));
+            cropState.rect.x = nx;
+            cropState.rect.y = ny;
+            drawCropCanvas();
+        } else if (cropState.resizing) {
+            const dx = mx - cropState.startX;
+            const dy = my - cropState.startY;
+            const sr = cropState.startRect;
+            const minSize = 20;
+            const c = cropState.corner;
+
+            let nx = sr.x, ny = sr.y, nw = sr.w, nh = sr.h;
+            if (c.includes('e')) nw = Math.max(minSize, sr.w + dx);
+            if (c.includes('w')) { nw = Math.max(minSize, sr.w - dx); nx = sr.x + dx; }
+            if (c.includes('s')) nh = Math.max(minSize, sr.h + dy);
+            if (c.includes('n')) { nh = Math.max(minSize, sr.h - dy); ny = sr.y + dy; }
+
+            if (nx < 0) { nw += nx; nx = 0; }
+            if (ny < 0) { nh += ny; ny = 0; }
+            if (nx + nw > canvas.width) nw = canvas.width - nx;
+            if (ny + nh > canvas.height) nh = canvas.height - ny;
+
+            cropState.rect = { x: nx, y: ny, w: nw, h: nh };
+            drawCropCanvas();
+        } else {
+            const corners = [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.h], [r.x + r.w, r.y + r.h]];
+            let nearCorner = false;
+            for (const [cx, cy] of corners) {
+                if (Math.abs(mx - cx) < threshold && Math.abs(my - cy) < threshold) {
+                    nearCorner = true;
+                    break;
+                }
+            }
+            if (nearCorner) {
+                canvas.style.cursor = 'nesw-resize';
+            } else if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+                canvas.style.cursor = 'move';
+            } else {
+                canvas.style.cursor = 'crosshair';
+            }
+        }
+    });
+
+    const stopDrag = () => {
+        cropState.dragging = false;
+        cropState.resizing = false;
+        cropState.corner = '';
+    };
+    canvas.addEventListener('pointerup', stopDrag);
+    canvas.addEventListener('pointerleave', stopDrag);
+    canvas.addEventListener('pointercancel', stopDrag);
+});
+
+async function doCrop() {
+    const canvas = document.getElementById('crop-canvas');
+    const { img, rect, scale } = cropState;
+    if (!img) return;
+
+    // Extract cropped region from original image
+    const cropCanvas = document.createElement('canvas');
+    const sx = rect.x / scale;
+    const sy = rect.y / scale;
+    const sw = rect.w / scale;
+    const sh = rect.h / scale;
+    cropCanvas.width = sw;
+    cropCanvas.height = sh;
+    const ctx = cropCanvas.getContext('2d');
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+
+    // Convert to blob and upload
+    const blob = await new Promise(resolve => cropCanvas.toBlob(resolve, 'image/png'));
+
+    const formData = new FormData();
+    formData.append('file', blob, 'cropped.png');
+
+    try {
+        const resp = await fetch('/api/upload', {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: formData
+        });
+        const result = await resp.json();
+        if (result.url) {
+            const url = (window.basePath || '') + result.url;
+            const w = prompt('图片宽度（可选，如 400，留空则使用原始大小）：');
+            const textarea = document.getElementById('article-content');
+            if (w && /^\d+$/.test(w.trim())) {
+                insertAtCursor(textarea, '<img src="' + url + '" alt="" width="' + w.trim() + '">');
+            } else {
+                insertAtCursor(textarea, '![](' + url + ')');
+            }
+            closeCropModal();
+        } else if (result.error) {
+            alert(result.error);
+        }
+    } catch (err) {
+        alert('裁剪失败: ' + err.message);
+    }
+}
+
+// ===== 续写 =====
+function aiContinue() {
+    const textarea = document.getElementById('article-content');
+    if (!textarea) return;
+    let selStart = textarea.selectionStart;
+    let selEnd = textarea.selectionEnd;
+    if (selStart === selEnd && savedSelStart !== savedSelEnd) {
+        selStart = savedSelStart;
+        selEnd = savedSelEnd;
+    }
+    const sel = textarea.value.substring(selStart, selEnd);
+    const text = sel || textarea.value;
+    if (!text.trim()) { alert('请先书写内容'); return; }
+
+    updateAIReference();
+    // Store context for when user picks a direction
+    window._continueContext = text;
+    window._continueCursorPos = sel ? null : textarea.selectionStart;
+    window._continueHasSelection = !!sel;
+    window._continueSelStart = selStart;
+    window._continueSelEnd = selEnd;
+
+    const container = document.getElementById('ai-messages');
+    const wrapper = document.createElement('div');
+    wrapper.className = 'ai-msg-wrapper';
+    wrapper.id = 'continue-prompt';
+    wrapper.innerHTML = `<div class="ai-msg assistant">
+        <div style="font-weight:500;margin-bottom:6px;">续写方向：</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="btn btn-sm btn-primary" onclick="doContinue('继续写下去')">继续写下去</button>
+            <button class="btn btn-sm" onclick="doContinue('换个角度写')">换个角度写</button>
+            <button class="btn btn-sm" onclick="doContinue('总结收尾')">总结收尾</button>
+        </div>
+    </div>`;
+    container.appendChild(wrapper);
+    container.scrollTop = container.scrollHeight;
+}
+
+async function doContinue(direction) {
+    // Remove the prompt buttons
+    const promptEl = document.getElementById('continue-prompt');
+    if (promptEl) promptEl.remove();
+
+    const text = window._continueContext;
+    if (!text) return;
+
+    addAIMessage('user', '[续写] ' + direction);
+    addAIMessage('system', '续写中...');
+
+    try {
+        const resp = await fetch('/api/ai/continue', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+            body: JSON.stringify({context: text, direction})
+        });
+        const result = await resp.json();
+
+        const msgs = document.querySelectorAll('#ai-messages .ai-msg.system');
+        msgs.forEach(m => { if (m.textContent === '续写中...') m.remove(); });
+
+        if (result.text) {
+            lastAIResult = result.text;
+            const textarea = document.getElementById('article-content');
+            if (window._continueHasSelection) {
+                lastAISelection = {start: window._continueSelStart, end: window._continueSelEnd};
+            } else {
+                lastAISelection = null;
+            }
+
+            const container = document.getElementById('ai-messages');
+            const wrapper = document.createElement('div');
+            wrapper.className = 'ai-msg-wrapper';
+            wrapper.innerHTML = `
+                <div class="ai-msg assistant">${esc(result.text)}</div>
+                <div class="ai-msg-actions">
+                    <button class="btn btn-sm btn-primary" onclick="replaceAIResult()">替换${lastAISelection ? '选中文字' : '全文'}</button>
+                    <button class="btn btn-sm" onclick="insertAIResult()">追加到文末</button>
+                    ${!window._continueHasSelection ? `<button class="btn btn-sm" onclick="insertContinueResult()">插入到光标处</button>` : ''}
+                </div>
+            `;
+            container.appendChild(wrapper);
+            container.scrollTop = container.scrollHeight;
+        } else if (result.error) {
+            addAIMessage('system', '错误: ' + result.error);
+        }
+    } catch (err) {
+        const msgs = document.querySelectorAll('#ai-messages .ai-msg.system');
+        msgs.forEach(m => { if (m.textContent === '续写中...') m.remove(); });
+        addAIMessage('system', '请求失败: ' + err.message);
+    }
+
+    window._continueContext = null;
+    window._continueCursorPos = null;
+    window._continueHasSelection = null;
+}
+
+function insertContinueResult() {
+    if (!lastAIResult) return;
+    const textarea = document.getElementById('article-content');
+    const pos = window._continueCursorPos || textarea.selectionStart;
+    textarea.value = textarea.value.substring(0, pos) + '\n\n' + lastAIResult + textarea.value.substring(pos);
+    textarea.dispatchEvent(new Event('input'));
+    lastAIResult = null;
+}
+
+// ===== 金句提取 =====
+async function aiHighlights() {
+    const textarea = document.getElementById('article-content');
+    const text = textarea ? textarea.value : '';
+    if (!text.trim()) { alert('请先书写文章内容'); return; }
+
+    addAIMessage('user', '[金句提取] 分析全文...');
+    addAIMessage('system', '分析中...');
+
+    try {
+        const resp = await fetch('/api/ai/highlights', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+            body: JSON.stringify({text})
+        });
+        const result = await resp.json();
+
+        const msgs = document.querySelectorAll('#ai-messages .ai-msg.system');
+        msgs.forEach(m => { if (m.textContent === '分析中...') m.remove(); });
+
+        if (result.highlights && result.highlights.length) {
+            const container = document.getElementById('ai-messages');
+            const wrapper = document.createElement('div');
+            wrapper.className = 'ai-msg-wrapper';
+            wrapper.innerHTML = `<div class="ai-msg assistant" style="line-height:1.8;">
+                <strong>金句提取：</strong>
+                ${result.highlights.map((h, i) =>
+                    `<div style="margin:2px 0 2px 8px;border-left:2px solid var(--accent);padding-left:8px;font-size:0.8rem;">
+                        <div style="font-style:italic;">${esc(h.sentence)}</div>
+                        <div style="font-size:0.72rem;color:var(--text-muted);">${esc(h.reason || '')}</div>
+                    </div>`
+                ).join('')}
+            </div>`;
+            container.appendChild(wrapper);
+            container.scrollTop = container.scrollHeight;
+        } else if (result.error) {
+            addAIMessage('system', '错误: ' + result.error);
+        } else {
+            addAIMessage('system', '未发现特别出彩的句子');
+        }
+    } catch (err) {
+        const msgs = document.querySelectorAll('#ai-messages .ai-msg.system');
+        msgs.forEach(m => { if (m.textContent === '分析中...') m.remove(); });
+        addAIMessage('system', '请求失败: ' + err.message);
+    }
+}
+
+// ===== 标签推荐 =====
+async function aiSuggestTags() {
+    const title = document.getElementById('article-title').value.trim();
+    const content = document.getElementById('article-content').value;
+    if (!title && !content.trim()) { alert('请先写一些内容'); return; }
+
+    addAIMessage('user', '[标签推荐] 分析文章中...');
+    addAIMessage('system', '分析中...');
+
+    try {
+        const resp = await fetch('/api/ai/suggest-tags', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+            body: JSON.stringify({title, content})
+        });
+        const result = await resp.json();
+
+        const msgs = document.querySelectorAll('#ai-messages .ai-msg.system');
+        msgs.forEach(m => { if (m.textContent === '分析中...') m.remove(); });
+
+        if (result.tags && result.tags.length) {
+            const tagsInput = document.getElementById('article-tags');
+            const currentTags = tagsInput.value.split(',').map(t => t.trim()).filter(Boolean);
+
+            const container = document.getElementById('ai-messages');
+            const wrapper = document.createElement('div');
+            wrapper.className = 'ai-msg-wrapper';
+            wrapper.innerHTML = `<div class="ai-msg assistant" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                <span style="font-size:0.8rem;color:var(--text-muted);">推荐标签：</span>
+                ${result.tags.map(t => {
+                    const added = currentTags.includes(t);
+                    return `<span class="ai-tag-chip${added ? ' added' : ''}" data-tag="${esc(t)}" onclick="addSuggestedTag(this)" style="
+                        display:inline-block;padding:3px 12px;border-radius:14px;font-size:0.8rem;
+                        font-family:var(--font-ui);cursor:pointer;transition:all 0.2s;
+                        ${added
+                            ? 'background:var(--accent);color:#fff;'
+                            : 'background:var(--accent-light);color:var(--accent);border:1px solid transparent;'}
+                    ">${esc(t)}${added ? ' ✓' : ' +'}</span>`;
+                }).join('')}
+            </div>`;
+            container.appendChild(wrapper);
+            container.scrollTop = container.scrollHeight;
+        } else if (result.error) {
+            addAIMessage('system', '错误: ' + result.error);
+        } else {
+            addAIMessage('system', '未能推荐标签');
+        }
+    } catch (err) {
+        const msgs = document.querySelectorAll('#ai-messages .ai-msg.system');
+        msgs.forEach(m => { if (m.textContent === '分析中...') m.remove(); });
+        addAIMessage('system', '请求失败: ' + err.message);
+    }
+}
+
+function addSuggestedTag(chip) {
+    const tag = chip.dataset.tag;
+    const tagsInput = document.getElementById('article-tags');
+    const currentTags = tagsInput.value.split(',').map(t => t.trim()).filter(Boolean);
+
+    if (currentTags.includes(tag)) {
+        // Remove tag
+        const idx = currentTags.indexOf(tag);
+        currentTags.splice(idx, 1);
+        tagsInput.value = currentTags.join(', ');
+        chip.classList.remove('added');
+        chip.style.background = 'var(--accent-light)';
+        chip.style.color = 'var(--accent)';
+        chip.innerHTML = esc(tag) + ' +';
+    } else {
+        // Add tag
+        currentTags.push(tag);
+        tagsInput.value = currentTags.join(', ');
+        chip.classList.add('added');
+        chip.style.background = 'var(--accent)';
+        chip.style.color = '#fff';
+        chip.innerHTML = esc(tag) + ' ✓';
+    }
+}
+
+// ===== 自定义模板 =====
+document.addEventListener('DOMContentLoaded', loadAITemplates);
+async function loadAITemplates() {
+    try {
+        const resp = await fetch('/api/ai/templates', {headers:{'X-Requested-With':'XMLHttpRequest'}});
+        const templates = await resp.json();
+        const container = document.getElementById('ai-templates');
+        const select = document.getElementById('ai-template-select');
+        if (!container || !select) return;
+        if (!templates.length) return;
+        container.style.display = 'flex';
+        select.innerHTML = '<option value="">自定义模板...</option>' +
+            templates.map(t => '<option value="' + t.id + '">' + esc(t.name) + '</option>').join('');
+    } catch(e) {}
+}
+
+async function aiUseTemplate() {
+    const select = document.getElementById('ai-template-select');
+    const tplId = select.value;
+    if (!tplId) return;
+
+    const textarea = document.getElementById('article-content');
+    let selStart = textarea.selectionStart;
+    let selEnd = textarea.selectionEnd;
+    if (selStart === selEnd && savedSelStart !== savedSelEnd) {
+        selStart = savedSelStart;
+        selEnd = savedSelEnd;
+    }
+    const sel = textarea.value.substring(selStart, selEnd);
+    const text = sel || textarea.value;
+    if (!text.trim()) { alert('请先选中文字或书写内容'); return; }
+
+    updateAIReference();
+    const tplName = select.options[select.selectedIndex].text;
+    addAIMessage('user', '[模板: ' + tplName + '] ' + (sel ? '处理选中文字...' : '处理全文...'));
+    addAIMessage('system', '处理中...');
+
+    try {
+        const resp = await fetch('/api/ai/template/' + tplId, {
+            method: 'POST',
+            headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+            body: JSON.stringify({text})
+        });
+        const result = await resp.json();
+
+        const msgs = document.querySelectorAll('#ai-messages .ai-msg.system');
+        msgs.forEach(m => { if (m.textContent === '处理中...') m.remove(); });
+
+        if (result.text) {
+            lastAIResult = result.text;
+            lastAISelection = sel ? {start: selStart, end: selEnd} : null;
+            const container = document.getElementById('ai-messages');
+            const wrapper = document.createElement('div');
+            wrapper.className = 'ai-msg-wrapper';
+            wrapper.innerHTML = `
+                <div class="ai-msg assistant">${esc(result.text)}</div>
+                <div class="ai-msg-actions">
+                    <button class="btn btn-sm btn-primary" onclick="replaceAIResult()">替换${lastAISelection ? '选中文字' : '全文'}</button>
+                    <button class="btn btn-sm" onclick="insertAIResult()">追加到文末</button>
+                </div>
+            `;
+            container.appendChild(wrapper);
+            container.scrollTop = container.scrollHeight;
+        } else if (result.error) {
+            addAIMessage('system', '错误: ' + result.error);
+        }
+    } catch(err) {
+        const msgs = document.querySelectorAll('#ai-messages .ai-msg.system');
+        msgs.forEach(m => { if (m.textContent === '处理中...') m.remove(); });
+        addAIMessage('system', '请求失败: ' + err.message);
+    }
+}
+
+// ===== 文章自引 @ 自动完成 =====
+
+let _refPopup = null;
+let _refTimer = null;
+let _refStart = -1;
+let _refIdx = -1;
+let _refResults = [];
+
+function initArticleRef() {
+    const ta = document.getElementById('article-content');
+    if (!ta) return;
+
+    _refPopup = document.createElement('div');
+    _refPopup.id = 'article-ref-popup';
+    _refPopup.className = 'article-ref-popup';
+    _refPopup.style.display = 'none';
+    _refPopup.innerHTML = '<div class="ref-popup-header">@引用文章（输入标题搜索）</div><div class="ref-popup-list" id="ref-popup-list"></div>';
+    document.body.appendChild(_refPopup);
+
+    ta.addEventListener('input', onRefInput);
+    ta.addEventListener('keydown', onRefKeydown);
+    ta.addEventListener('blur', () => setTimeout(closeRefPopup, 200));
+    ta.addEventListener('scroll', positionRefPopupRef);
+    window.addEventListener('scroll', positionRefPopupRef, true);
+    document.addEventListener('click', (e) => {
+        if (_refPopup && !_refPopup.contains(e.target) && e.target !== ta) closeRefPopup();
+    });
+}
+
+function onRefInput(e) {
+    const ta = e.target;
+    const pos = ta.selectionStart;
+    const text = ta.value;
+
+    // 向前查找最近的 @（仅以换行为边界）
+    let atPos = -1;
+    for (let i = pos - 1; i >= 0; i--) {
+        if (text[i] === '\n') break;
+        if (text[i] === '@') {
+            if (i === 0 || text[i-1] === ' ' || text[i-1] === '\n') {
+                atPos = i;
+                break;
+            }
+        }
+    }
+
+    if (atPos === -1) {
+        closeRefPopup();
+        return;
+    }
+
+    const query = text.substring(atPos + 1, pos);
+    // 查询仅为空白字符时（如 @ 后只打了空格），关闭弹窗让用户保留原文 @
+    if (/^\s+$/.test(query)) {
+        closeRefPopup();
+        return;
+    }
+    _refStart = atPos;
+    _refIdx = -1;
+    _refResults = [];
+
+    // 同步显示弹窗并立即展示搜索状态
+    openRefPopup(query ? '<div class="ref-popup-loading">搜索中...</div>' : '<div class="ref-popup-empty">输入关键词搜索文章，按 Esc 保留 @ 原文</div>');
+
+    // 防抖搜索
+    clearTimeout(_refTimer);
+    _refTimer = setTimeout(() => searchRefArticles(query), 200);
+}
+
+function onRefKeydown(e) {
+    if (!_refPopup || _refPopup.style.display === 'none') return;
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        _refIdx = Math.min(_refIdx + 1, _refResults.length - 1);
+        updateRefActive();
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        _refIdx = Math.max(_refIdx - 1, 0);
+        updateRefActive();
+    } else if (e.key === 'Enter') {
+        if (_refIdx >= 0 && _refResults[_refIdx]) {
+            e.preventDefault();
+            selectRefArticle(_refResults[_refIdx]);
+        } else {
+            closeRefPopup();
+        }
+    } else if (e.key === 'Escape') {
+        closeRefPopup();
+    } else if (e.key === ' ') {
+        // 光标紧挨 @ 后且无查询内容时，空格退出引用（用户想输入原文 @）
+        const ta = document.getElementById('article-content');
+        if (ta && _refStart >= 0 && ta.selectionStart === _refStart + 1) {
+            closeRefPopup();
+        }
+    }
+}
+
+function openRefPopup(html) {
+    const list = document.getElementById('ref-popup-list');
+    if (list) list.innerHTML = html;
+    if (_refPopup) _refPopup.style.display = '';
+    positionRefPopupRef();
+}
+
+function positionRefPopupRef() {
+    if (!_refPopup || _refPopup.style.display === 'none') return;
+    const ta = document.getElementById('article-content');
+    if (!ta) return;
+
+    const rect = ta.getBoundingClientRect();
+    // 确保弹窗不超出视口
+    let left = rect.left;
+    let top = rect.bottom + 4;
+    const width = Math.min(360, rect.width);
+    if (left + width > window.innerWidth - 10) left = window.innerWidth - width - 10;
+    if (left < 10) left = 10;
+    if (top + 280 > window.innerHeight) top = rect.top - 284;
+    _refPopup.style.left = left + 'px';
+    _refPopup.style.top = top + 'px';
+    _refPopup.style.width = width + 'px';
+}
+
+async function searchRefArticles(query) {
+    const list = document.getElementById('ref-popup-list');
+    if (!list) return;
+
+    if (!query) {
+        if (list) list.innerHTML = '<div class="ref-popup-empty">输入标题关键词搜索...</div>';
+        return;
+    }
+
+    try {
+        const resp = await fetch('/api/articles?scope=reference&search=' + encodeURIComponent(query) + '&per_page=8', {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const data = await resp.json();
+        _refResults = (data.articles || []).slice(0, 8);
+        _refIdx = _refResults.length > 0 ? 0 : -1;
+        if (list) renderRefList(list);
+    } catch (e) {
+        if (list) list.innerHTML = '<div class="ref-popup-empty">搜索失败，请重试</div>';
+        _refResults = [];
+        _refIdx = -1;
+    }
+}
+
+function renderRefList(list) {
+    if (!_refResults.length) {
+        list.innerHTML = '<div class="ref-popup-empty">无匹配文章</div>';
+        return;
+    }
+    list.innerHTML = _refResults.map((a, i) => `
+        <button class="ref-popup-item${i === _refIdx ? ' active' : ''}" data-idx="${i}">
+            <div class="ref-title">${esc(a.title || '无标题')}</div>
+            <div class="ref-meta">${esc(a.author_display_name || a.author_name || '')} &middot; ${esc((a.created_at || '').substring(0, 10))}</div>
+        </button>
+    `).join('');
+
+    list.querySelectorAll('.ref-popup-item').forEach(btn => {
+        btn.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            selectRefArticle(_refResults[parseInt(btn.dataset.idx)]);
+        });
+    });
+}
+
+function updateRefActive() {
+    const list = document.getElementById('ref-popup-list');
+    if (!list) return;
+    list.querySelectorAll('.ref-popup-item').forEach((btn, i) => {
+        btn.classList.toggle('active', i === _refIdx);
+    });
+    const active = list.querySelector('.ref-popup-item.active');
+    if (active) active.scrollIntoView({ block: 'nearest' });
+}
+
+function selectRefArticle(article) {
+    const ta = document.getElementById('article-content');
+    if (!ta || !article) return;
+
+    const before = ta.value.substring(0, _refStart);
+    const pos = ta.selectionStart;
+    const after = ta.value.substring(pos);
+
+    const link = '[' + article.title + '](' + (window.basePath || '') + '/article/' + article.id + ') ';
+    ta.value = before + link + after;
+
+    const newPos = before.length + link.length;
+    ta.setSelectionRange(newPos, newPos);
+    ta.focus();
+
+    closeRefPopup();
+}
+
+function closeRefPopup() {
+    if (_refPopup) _refPopup.style.display = 'none';
+    _refStart = -1;
+    _refIdx = -1;
+    _refResults = [];
+    clearTimeout(_refTimer);
+}
+
+window.addEventListener('resize', () => {
+    if (_refPopup && _refPopup.style.display !== 'none') positionRefPopupRef();
+});
