@@ -49,11 +49,10 @@ $is_faved = in_array($article['id'], $user['favorite_article_ids'] ?? []);
                     </select>
                     <button class="btn btn-sm" onclick="quickShare('<?= h($article['id']) ?>')" title="分享">分享</button>
                     <button class="btn btn-sm btn-danger" onclick="deleteArticle('<?= h($article['id']) ?>', true)">删除</button>
-                <?php else: ?>
-                    <button class="btn btn-sm<?= $is_faved ? ' btn-primary' : '' ?>" id="fav-btn" onclick="toggleFavorite('<?= h($article['id']) ?>')">
-                        <?= $is_faved ? '★ 已收藏' : '☆ 收藏' ?>
-                    </button>
                 <?php endif; ?>
+                <button class="btn btn-sm<?= $is_faved ? ' btn-primary' : '' ?>" id="fav-btn" onclick="toggleFavorite('<?= h($article['id']) ?>')">
+                    <?= $is_faved ? '★ 已收藏' : '☆ 收藏' ?>
+                </button>
             </div>
         </div>
 
