@@ -276,9 +276,13 @@ function applyToolbar(textarea, before, after, sel, start, end) {
 
 function doReplace(textarea, text, start, end, cursorPos) {
     textarea.focus();
-    // setRangeText 自动触发 input 事件，无需手动派发（重复派发会导致撤销栈混乱）
-    textarea.setRangeText(text, start, end, 'end');
-    textarea.setSelectionRange(cursorPos, cursorPos);
+    textarea.setSelectionRange(start, end);
+    // execCommand('insertText') 是确保浏览器正确记录撤销栈的最可靠方式
+    document.execCommand('insertText', false, text);
+    // insertText 后光标在替换文本末尾，若需调整则手动设置
+    if (cursorPos !== undefined && cursorPos !== textarea.selectionStart) {
+        textarea.setSelectionRange(cursorPos, cursorPos);
+    }
 }
 
 function escRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
@@ -328,12 +332,15 @@ function toolbarAction(textarea, action) {
         case 'color':
             showColorPicker(textarea, sel, start, end);
             return;
+        case 'hex':
+            showHexPicker(textarea, start, end);
+            return;
     }
 
     applyToolbar(textarea, before, after, sel, start, end);
 }
 
-// ===== 颜色选择 =====
+// ===== 文字颜色（包裹 span） =====
 
 let _colorPicker = null;
 
@@ -348,7 +355,6 @@ function showColorPicker(textarea, sel, start, end) {
         '#8e44ad','#ffffff','#cccccc','#999999','#666666','#333333','#000000',
     ];
 
-    // 计算合适位置：优先在文字下方，空间不足则在上方
     const popupW = 232, popupH = 210;
     let pLeft = Math.max(8, Math.min(rect.left, window.innerWidth - popupW - 8));
     let pTop = rect.bottom + 6;
@@ -391,8 +397,7 @@ function showColorPicker(textarea, sel, start, end) {
     clearBtn.textContent = '清除颜色';
     clearBtn.style.cssText = 'width:100%;margin-top:4px;padding:4px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;font-size:0.72rem;color:var(--text-muted);';
     clearBtn.onmousedown = (e) => { e.preventDefault();
-        const re = /<span\s+style="[^"]*color:\s*[^;"]*;?\s*"[^>]*>(.*?)<\/span>/gi;
-        if (sel && re.test(sel)) {
+        if (sel && /<span\s+style="[^"]*color:\s*[^;"]*;?\s*"[^>]*>(.*?)<\/span>/gi.test(sel)) {
             const cleaned = sel.replace(/<span\s+style="[^"]*color:\s*[^;"]*;?\s*"[^>]*>(.*?)<\/span>/gi, '$1');
             doReplace(textarea, cleaned, start, end, start + cleaned.length);
         }
@@ -409,7 +414,6 @@ function showColorPicker(textarea, sel, start, end) {
 
 function applyColor(textarea, color, sel, start, end, pickerDiv) {
     if (!color) return;
-    // 标准化颜色值
     color = color.replace(/\s+/g, '');
     if (!/^(#[0-9a-fA-F]{3,8}|rgb\(|rgba\(|hsl\(|hsla\()/.test(color)) {
         if (/^[0-9a-fA-F]{3,8}$/.test(color)) color = '#' + color;
@@ -419,6 +423,86 @@ function applyColor(textarea, color, sel, start, end, pickerDiv) {
     const wrapped = '<span style="color: ' + color + '">' + text + '</span>';
     doReplace(textarea, wrapped, start, end, start + wrapped.length);
     if (pickerDiv) { pickerDiv.remove(); _colorPicker = null; }
+}
+
+// ===== 十六进制颜色取色器（插入纯 hex 文本） =====
+
+let _hexPicker = null;
+
+function showHexPicker(textarea, start, end) {
+    if (_hexPicker) { _hexPicker.remove(); _hexPicker = null; return; }
+
+    const presetColors = [
+        '#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c','#3498db',
+        '#9b59b6','#e91e63','#00bcd4','#8bc34a','#ff5722','#607d8b',
+        '#c0392b','#d35400','#f39c12','#27ae60','#16a085','#2980b9',
+        '#8e44ad','#ffffff','#cccccc','#999999','#666666','#333333','#000000',
+    ];
+
+    const popupW = 240;
+    let pLeft = Math.max(8, Math.min(textarea.getBoundingClientRect().left, window.innerWidth - popupW - 8));
+    let pTop = textarea.getBoundingClientRect().bottom + 6;
+    if (pTop + 280 > window.innerHeight - 8) pTop = textarea.getBoundingClientRect().top - 286;
+    if (pTop < 8) pTop = 8;
+
+    const div = document.createElement('div');
+    div.id = 'hex-picker-popup';
+    div.className = 'color-picker-popup';
+    div.style.cssText = 'position:fixed;z-index:1100;background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:8px;padding:10px;box-shadow:0 4px 16px rgba(0,0,0,0.15);width:' + popupW + 'px;';
+    div.style.left = pLeft + 'px';
+    div.style.top = pTop + 'px';
+
+    // 原生取色器行
+    const pickerRow = document.createElement('div');
+    pickerRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px;';
+    const nativeInput = document.createElement('input');
+    nativeInput.type = 'color';
+    nativeInput.value = '#e74c3c';
+    nativeInput.style.cssText = 'width:36px;height:30px;border:none;border-radius:4px;cursor:pointer;padding:0;background:transparent;';
+    const hexDisplay = document.createElement('span');
+    hexDisplay.style.cssText = 'font-family:monospace;font-size:0.85rem;font-weight:600;color:var(--text);';
+    hexDisplay.textContent = '#E74C3C';
+    nativeInput.addEventListener('input', () => { hexDisplay.textContent = nativeInput.value.toUpperCase(); });
+    const insertBtn = document.createElement('button');
+    insertBtn.textContent = '插入';
+    insertBtn.style.cssText = 'margin-left:auto;padding:3px 12px;border:1px solid var(--accent);border-radius:4px;background:var(--accent);color:#fff;cursor:pointer;font-size:0.78rem;font-weight:500;';
+    insertBtn.onmousedown = (e) => { e.preventDefault(); applyHexColor(textarea, nativeInput.value, start, end, div); };
+    pickerRow.appendChild(nativeInput);
+    pickerRow.appendChild(hexDisplay);
+    pickerRow.appendChild(insertBtn);
+    div.appendChild(pickerRow);
+
+    // 预设色块
+    const swatchesRow = document.createElement('div');
+    swatchesRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:5px;';
+    presetColors.forEach(c => {
+        const swatch = document.createElement('button');
+        swatch.style.cssText = 'width:26px;height:26px;border-radius:4px;border:1px solid var(--border);cursor:pointer;background:' + c + ';';
+        if (c === '#ffffff') swatch.style.border = '1px solid #ccc';
+        swatch.onmousedown = (e) => { e.preventDefault(); applyHexColor(textarea, c, start, end, div); };
+        swatchesRow.appendChild(swatch);
+    });
+    div.appendChild(swatchesRow);
+
+    document.body.appendChild(div);
+    _hexPicker = div;
+
+    const closeCP = (e) => { if (!div.contains(e.target) && e.target !== textarea) { div.remove(); _hexPicker = null; document.removeEventListener('click', closeCP); } };
+    setTimeout(() => document.addEventListener('click', closeCP), 0);
+}
+
+function applyHexColor(textarea, color, start, end, pickerDiv) {
+    if (!color) return;
+    color = color.replace(/\s+/g, '');
+    if (!/^#[0-9a-fA-F]{3,8}$/.test(color)) {
+        if (/^[0-9a-fA-F]{3,8}$/.test(color)) color = '#' + color;
+        else return;
+    }
+    const hex = color.length === 4
+        ? '#' + color[1]+color[1] + color[2]+color[2] + color[3]+color[3]
+        : color.toUpperCase();
+    doReplace(textarea, hex, start, end, start + hex.length);
+    if (pickerDiv) { pickerDiv.remove(); _hexPicker = null; }
 }
 
 // ===== 保存文章 =====

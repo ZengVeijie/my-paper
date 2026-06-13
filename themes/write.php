@@ -65,6 +65,7 @@ $article_id = $article['id'] ?? '';
                 <button type="button" data-action="table" title="表格">&#x2637;</button>
                 <button type="button" data-action="hr" title="分割线">&mdash;</button>
                 <button type="button" data-action="color" title="文字颜色" style="color:var(--accent);font-weight:bold;">A&#x25c9;</button>
+                <button type="button" data-action="hex" title="取色器（插入 #RRGGBB）" style="font-weight:bold;">#</button>
                 <span class="toolbar-sep"></span>
                 <button type="button" data-action="latex-inline" title="行内公式">$x$</button>
                 <button type="button" data-action="latex-block" title="块级公式">$$</button>
