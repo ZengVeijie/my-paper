@@ -1,4 +1,4 @@
-/* ===== My Paper - 基础样式 ===== */
+/* ===== 平静之心 - 基础样式 ===== */
 
 :root {
     --bg: #faf9f6;
@@ -1945,4 +1945,11 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
     font-family: var(--font-ui);
     font-size: 0.8rem;
     color: var(--text-muted);
+}
+
+/* ===== 颜色选择器 ===== */
+
+.color-picker-popup button:hover {
+    transform: scale(1.15);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
 }

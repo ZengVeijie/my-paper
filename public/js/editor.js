@@ -1,5 +1,5 @@
 /**
- * My Paper - 编辑器 & AI 助手
+ * 平静之心 - 编辑器 & AI 助手
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -124,7 +124,9 @@ function initEditor() {
         const md = textarea.value;
         if (md.trim() && typeof marked !== 'undefined') {
             if (previewEmpty) previewEmpty.style.display = 'none';
-            preview.innerHTML = marked.parse(md);
+            // 连续3个以上换行 → 显式插入 <br> 保留多行间距
+            let processed = md.replace(/\n{3,}/g, '\n\n<br>\n');
+            preview.innerHTML = marked.parse(processed);
         } else if (md.trim()) {
             if (previewEmpty) previewEmpty.style.display = 'none';
             preview.innerHTML = '<p style="color:var(--text-muted)">Markdown 渲染库加载中...</p>';
@@ -136,14 +138,37 @@ function initEditor() {
     textarea.addEventListener('input', () => { editorDirty = true; updatePreview(); });
     updatePreview();
 
+    // 若 marked 尚未加载（CDN 延迟），等待后重试
+    if (typeof marked === 'undefined') {
+        let retries = 0;
+        const waitMarked = setInterval(() => {
+            retries++;
+            if (typeof marked !== 'undefined') {
+                clearInterval(waitMarked);
+                updatePreview();
+            } else if (retries > 30) {
+                clearInterval(waitMarked);
+            }
+        }, 200);
+    }
+
     // Tab 键支持
     textarea.addEventListener('keydown', (e) => {
         if (e.key === 'Tab') {
             e.preventDefault();
             const start = textarea.selectionStart;
             const end = textarea.selectionEnd;
-            textarea.value = textarea.value.substring(0, start) + '    ' + textarea.value.substring(end);
-            textarea.selectionStart = textarea.selectionEnd = start + 4;
+            if (start !== end) {
+                // 多行选中：每行缩进
+                const before = textarea.value.substring(0, start);
+                const sel = textarea.value.substring(start, end);
+                const after = textarea.value.substring(end);
+                const lines = sel.split('\n');
+                const indented = lines.map(l => '    ' + l).join('\n');
+                doReplace(textarea, indented, start, end, start + indented.length);
+            } else {
+                doReplace(textarea, '    ', start, end, start + 4);
+            }
         }
     });
 
@@ -233,18 +258,35 @@ async function saveDraft() {
     } catch (e) { /* 静默处理 */ }
 }
 
-function insertAtCursor(textarea, text) {
-    const start = textarea.selectionStart;
-    textarea.value = textarea.value.substring(0, start) + text + textarea.value.substring(textarea.selectionEnd);
-    textarea.selectionStart = textarea.selectionEnd = start + text.length;
-    textarea.dispatchEvent(new Event('input'));
-    textarea.focus();
+function applyToolbar(textarea, before, after, sel, start, end) {
+    // 若选中文字两端已包裹相同标记，则移除（toggle）
+    if (sel && before && after && before === after) {
+        const re = new RegExp('^' + escRegex(before) + '(.*)' + escRegex(after) + '$');
+        const m = sel.match(re);
+        if (m) {
+            doReplace(textarea, m[1], start, end, start + m[1].length);
+            return;
+        }
+    }
+    // 若选中文字两端已有其他标记，叠加：新标记在外
+    const replacement = before + sel + after;
+    const cursorPos = (!sel && before && after) ? start + before.length : start + replacement.length;
+    doReplace(textarea, replacement, start, end, cursorPos);
 }
 
+function doReplace(textarea, text, start, end, cursorPos) {
+    textarea.focus();
+    textarea.setRangeText(text, start, end, 'end');
+    textarea.setSelectionRange(cursorPos, cursorPos);
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function escRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
 function toolbarAction(textarea, action) {
-    const sel = textarea.value.substring(textarea.selectionStart, textarea.selectionEnd);
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
+    const sel = textarea.value.substring(start, end);
     let before = '', after = '';
 
     switch (action) {
@@ -261,9 +303,9 @@ function toolbarAction(textarea, action) {
             if (!imgUrl) return;
             const imgWidth = prompt('图片宽度（可选，如 400，留空则使用原始大小）：');
             if (imgWidth && /^\d+$/.test(imgWidth.trim())) {
-                insertAtCursor(textarea, '<img src="' + imgUrl + '" alt="" width="' + imgWidth.trim() + '">');
+                doReplace(textarea, '<img src="' + imgUrl + '" alt="" width="' + imgWidth.trim() + '">', start, end, start);
             } else {
-                insertAtCursor(textarea, '![](' + imgUrl + ')');
+                doReplace(textarea, '![](' + imgUrl + ')', start, end, start);
             }
             return;
         case 'code': before = '\n```\n'; after = '\n```\n'; break;
@@ -277,21 +319,99 @@ function toolbarAction(textarea, action) {
             for (let r = 1; r < rows; r++) {
                 tableMd += '| ' + Array(cols).fill('  内容').join(' | ') + ' |\n';
             }
-            insertAtCursor(textarea, tableMd);
+            doReplace(textarea, tableMd, start, end, start + tableMd.length);
             return;
         case 'hr': before = '\n---\n'; break;
         case 'indent': before = '　　'; break;
+        case 'latex-inline': before = '$'; after = '$'; break;
+        case 'latex-block': before = '$$\n'; after = '\n$$'; break;
+        case 'color':
+            showColorPicker(textarea, sel, start, end);
+            return;
     }
 
-    const replacement = before + sel + after;
-    textarea.value = textarea.value.substring(0, start) + replacement + textarea.value.substring(end);
+    applyToolbar(textarea, before, after, sel, start, end);
+}
 
-    if (!sel && before && after) {
-        // Place cursor between before and after
-        textarea.selectionStart = textarea.selectionEnd = start + before.length;
-    } else {
-        textarea.selectionStart = textarea.selectionEnd = start + replacement.length;
+// ===== 颜色选择 =====
+
+let _colorPicker = null;
+
+function showColorPicker(textarea, sel, start, end) {
+    if (_colorPicker) { _colorPicker.remove(); _colorPicker = null; return; }
+
+    const rect = textarea.getBoundingClientRect();
+    const presetColors = [
+        '#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c','#3498db',
+        '#9b59b6','#e91e63','#00bcd4','#8bc34a','#ff5722','#607d8b',
+        '#c0392b','#d35400','#f39c12','#27ae60','#16a085','#2980b9',
+        '#8e44ad','#ffffff','#cccccc','#999999','#666666','#333333','#000000',
+    ];
+
+    const div = document.createElement('div');
+    div.id = 'color-picker-popup';
+    div.className = 'color-picker-popup';
+    div.style.cssText = 'position:fixed;z-index:1100;background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:8px;padding:10px;box-shadow:0 4px 16px rgba(0,0,0,0.15);display:flex;flex-wrap:wrap;gap:4px;width:228px;';
+    div.style.left = Math.min(rect.left, window.innerWidth - 240) + 'px';
+    div.style.top = (rect.bottom + 6) + 'px';
+
+    // 自定义颜色输入
+    const customRow = document.createElement('div');
+    customRow.style.cssText = 'width:100%;display:flex;gap:4px;margin-bottom:4px;';
+    const customInput = document.createElement('input');
+    customInput.type = 'text';
+    customInput.placeholder = '#hex 或 rgb()';
+    customInput.style.cssText = 'flex:1;padding:3px 6px;border:1px solid var(--border);border-radius:4px;font-size:0.75rem;font-family:monospace;';
+    const customBtn = document.createElement('button');
+    customBtn.textContent = '应用';
+    customBtn.style.cssText = 'padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;font-size:0.75rem;';
+    customBtn.onclick = () => { applyColor(textarea, customInput.value.trim(), sel, start, end, div); };
+    customInput.onkeydown = (e) => { if (e.key === 'Enter') applyColor(textarea, customInput.value.trim(), sel, start, end, div); };
+    customRow.appendChild(customInput);
+    customRow.appendChild(customBtn);
+    div.appendChild(customRow);
+
+    presetColors.forEach(c => {
+        const swatch = document.createElement('button');
+        swatch.style.cssText = 'width:24px;height:24px;border-radius:4px;border:1px solid var(--border);cursor:pointer;background:' + c + ';';
+        if (c === '#ffffff') swatch.style.border = '1px solid #ccc';
+        swatch.onmousedown = (e) => { e.preventDefault(); applyColor(textarea, c, sel, start, end, div); };
+        div.appendChild(swatch);
+    });
+
+    // 清除颜色按钮
+    const clearBtn = document.createElement('button');
+    clearBtn.textContent = '清除颜色';
+    clearBtn.style.cssText = 'width:100%;margin-top:4px;padding:4px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;font-size:0.72rem;color:var(--text-muted);';
+    clearBtn.onmousedown = (e) => { e.preventDefault();
+        const re = /<span\s+style="[^"]*color:\s*[^;"]*;?\s*"[^>]*>(.*?)<\/span>/gi;
+        if (sel && re.test(sel)) {
+            const cleaned = sel.replace(/<span\s+style="[^"]*color:\s*[^;"]*;?\s*"[^>]*>(.*?)<\/span>/gi, '$1');
+            doReplace(textarea, cleaned, start, end, start + cleaned.length);
+        }
+        div.remove(); _colorPicker = null;
+    };
+    div.appendChild(clearBtn);
+
+    document.body.appendChild(div);
+    _colorPicker = div;
+
+    const closeCP = (e) => { if (!div.contains(e.target) && e.target !== textarea) { div.remove(); _colorPicker = null; document.removeEventListener('click', closeCP); } };
+    setTimeout(() => document.addEventListener('click', closeCP), 0);
+}
+
+function applyColor(textarea, color, sel, start, end, pickerDiv) {
+    if (!color) return;
+    // 标准化颜色值
+    color = color.replace(/\s+/g, '');
+    if (!/^(#[0-9a-fA-F]{3,8}|rgb\(|rgba\(|hsl\(|hsla\()/.test(color)) {
+        if (/^[0-9a-fA-F]{3,8}$/.test(color)) color = '#' + color;
+        else return;
     }
+    const text = sel || '文字';
+    const wrapped = '<span style="color: ' + color + '">' + text + '</span>';
+    doReplace(textarea, wrapped, start, end, start + wrapped.length);
+    if (pickerDiv) { pickerDiv.remove(); _colorPicker = null; }
 }
 
 // ===== 保存文章 =====

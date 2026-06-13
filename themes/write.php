@@ -64,6 +64,10 @@ $article_id = $article['id'] ?? '';
                 <button type="button" data-action="code" title="代码">&lt;/&gt;</button>
                 <button type="button" data-action="table" title="表格">&#x2637;</button>
                 <button type="button" data-action="hr" title="分割线">&mdash;</button>
+                <button type="button" data-action="color" title="文字颜色" style="color:var(--accent);font-weight:bold;">A&#x25c9;</button>
+                <span class="toolbar-sep"></span>
+                <button type="button" data-action="latex-inline" title="行内公式">$x$</button>
+                <button type="button" data-action="latex-block" title="块级公式">$$</button>
                 <span class="toolbar-sep"></span>
                 <button type="button" data-action="indent" title="段前缩进（两全角空格）">&raquo;</button>
                 <span class="toolbar-sep"></span>
