@@ -80,7 +80,11 @@ $total = $total ?? 0;
                     </div>
                     <?php else: ?>
                     <div class="article-actions">
-                        <span style="color:var(--text-muted);font-family:var(--font-ui);font-size:0.8rem;">来自协作文集</span>
+                        <?php if (is_admin()): ?>
+                            <span style="color:var(--text-muted);font-family:var(--font-ui);font-size:0.8rem;">作者：<?= h($a['author_name'] ?? '未知') ?></span>
+                        <?php else: ?>
+                            <span style="color:var(--text-muted);font-family:var(--font-ui);font-size:0.8rem;">来自协作文集</span>
+                        <?php endif; ?>
                     </div>
                     <?php endif; ?>
                 </div>
