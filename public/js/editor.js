@@ -124,8 +124,8 @@ function initEditor() {
         const md = textarea.value;
         if (md.trim() && typeof marked !== 'undefined') {
             if (previewEmpty) previewEmpty.style.display = 'none';
-            // 连续3个以上换行 → 显式插入 <br> 保留多行间距
-            let processed = md.replace(/\n{3,}/g, '\n\n<br>\n');
+            // 连续3个以上换行 → 每多一个换行插一个 <br>，保留实际空行
+            let processed = md.replace(/\n{3,}/g, m => '\n\n' + '<br>'.repeat(m.length - 2) + '\n');
             preview.innerHTML = marked.parse(processed);
         } else if (md.trim()) {
             if (previewEmpty) previewEmpty.style.display = 'none';
@@ -276,9 +276,9 @@ function applyToolbar(textarea, before, after, sel, start, end) {
 
 function doReplace(textarea, text, start, end, cursorPos) {
     textarea.focus();
+    // setRangeText 自动触发 input 事件，无需手动派发（重复派发会导致撤销栈混乱）
     textarea.setRangeText(text, start, end, 'end');
     textarea.setSelectionRange(cursorPos, cursorPos);
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 function escRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
@@ -348,12 +348,19 @@ function showColorPicker(textarea, sel, start, end) {
         '#8e44ad','#ffffff','#cccccc','#999999','#666666','#333333','#000000',
     ];
 
+    // 计算合适位置：优先在文字下方，空间不足则在上方
+    const popupW = 232, popupH = 210;
+    let pLeft = Math.max(8, Math.min(rect.left, window.innerWidth - popupW - 8));
+    let pTop = rect.bottom + 6;
+    if (pTop + popupH > window.innerHeight - 8) pTop = rect.top - popupH - 6;
+    if (pTop < 8) pTop = 8;
+
     const div = document.createElement('div');
     div.id = 'color-picker-popup';
     div.className = 'color-picker-popup';
-    div.style.cssText = 'position:fixed;z-index:1100;background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:8px;padding:10px;box-shadow:0 4px 16px rgba(0,0,0,0.15);display:flex;flex-wrap:wrap;gap:4px;width:228px;';
-    div.style.left = Math.min(rect.left, window.innerWidth - 240) + 'px';
-    div.style.top = (rect.bottom + 6) + 'px';
+    div.style.cssText = 'position:fixed;z-index:1100;background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:8px;padding:10px;box-shadow:0 4px 16px rgba(0,0,0,0.15);display:flex;flex-wrap:wrap;gap:4px;width:' + popupW + 'px;';
+    div.style.left = pLeft + 'px';
+    div.style.top = pTop + 'px';
 
     // 自定义颜色输入
     const customRow = document.createElement('div');
