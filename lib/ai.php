@@ -767,6 +767,34 @@ function save_user_ai_templates(array $templates): void {
     json_write($path, $user);
 }
 
+function handle_ai_reorder_templates(): void {
+    require_login();
+    $data = body_json();
+    $ids = $data['ids'] ?? [];
+    if (!is_array($ids) || count($ids) < 2) json_response(['error' => '请提供排序后的模板ID数组'], 400);
+
+    $templates = get_user_ai_templates();
+    $map = [];
+    foreach ($templates as $t) {
+        $map[$t['id']] = $t;
+    }
+
+    $reordered = [];
+    foreach ($ids as $id) {
+        if (isset($map[$id])) {
+            $reordered[] = $map[$id];
+            unset($map[$id]);
+        }
+    }
+    // 未在排序列表中的模板追加到末尾
+    foreach ($map as $t) {
+        $reordered[] = $t;
+    }
+
+    save_user_ai_templates($reordered);
+    json_response(['ok' => true]);
+}
+
 function handle_ai_generate_template(): void {
     require_login();
     $data = body_json();

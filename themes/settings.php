@@ -185,8 +185,12 @@ async function loadTemplates() {
         const el = document.getElementById('template-list');
         if (!templates.length) { el.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">暂无自定义模板</p>'; return; }
         allTemplates = templates;
-        el.innerHTML = templates.map(t =>
-            `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border-light);gap:12px;">
+        el.innerHTML = templates.map((t, i) =>
+            `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border-light);gap:8px;">
+                <div style="display:flex;flex-direction:column;gap:1px;flex-shrink:0;">
+                    <button class="btn-text" onclick="moveTemplate('${t.id}', -1)" ${i === 0 ? 'disabled' : ''} style="font-size:0.65rem;padding:0 2px;line-height:1;" title="上移">▲</button>
+                    <button class="btn-text" onclick="moveTemplate('${t.id}', 1)" ${i === templates.length-1 ? 'disabled' : ''} style="font-size:0.65rem;padding:0 2px;line-height:1;" title="下移">▼</button>
+                </div>
                 <div style="min-width:0;flex:1;">
                     <div style="font-weight:500;font-size:0.85rem;">${esc(t.name)}</div>
                     <div style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(t.prompt)}</div>
@@ -256,6 +260,28 @@ async function updateTemplate(id) {
 
 function cancelEditTemplate() {
     resetTemplateForm();
+}
+
+async function moveTemplate(id, direction) {
+    const idx = allTemplates.findIndex(t => t.id === id);
+    if (idx < 0) return;
+    const newIdx = idx + direction;
+    if (newIdx < 0 || newIdx >= allTemplates.length) return;
+
+    const ids = allTemplates.map(t => t.id);
+    ids.splice(idx, 1);
+    ids.splice(newIdx, 0, id);
+
+    try {
+        const resp = await fetch('/api/ai/templates/reorder', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+            body: JSON.stringify({ids})
+        });
+        const r = await resp.json();
+        if (r.error) { alert(r.error); return; }
+        loadTemplates();
+    } catch(e) { alert('排序失败'); }
 }
 
 async function aiGenerateTemplate() {

@@ -336,6 +336,7 @@ $router->post('/api/ai/suggest-title', 'handle_ai_suggest_title');
 $router->post('/api/ai/highlights', 'handle_ai_highlights');
 $router->post('/api/ai/generate-template', 'handle_ai_generate_template');
 $router->get('/api/ai/templates', 'handle_ai_list_templates');
+$router->post('/api/ai/templates/reorder', 'handle_ai_reorder_templates');
 $router->post('/api/ai/templates', 'handle_ai_create_template');
 $router->put('/api/ai/templates/{id}', 'handle_ai_update_template');
 $router->delete('/api/ai/templates/{id}', 'handle_ai_delete_template');
