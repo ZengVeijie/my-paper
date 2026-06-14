@@ -14,7 +14,7 @@ function handle_export_templates(): void {
     $templates = $user['ai_templates'] ?? [];
 
     header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename="My_Paper_templates.csv"');
+    header('Content-Disposition: attachment; filename="My_Paper_templates_' . date('Ymd_His') . '.csv"');
     $fp = fopen('php://output', 'w');
     fwrite($fp, "\xEF\xBB\xBF"); // BOM for Excel compatibility
     fputcsv($fp, ['名称', '提示词']);
