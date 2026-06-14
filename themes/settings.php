@@ -70,6 +70,16 @@
         <div id="template-list" style="margin-bottom:16px;">
             <p style="color:var(--text-muted);font-size:0.85rem;">加载中...</p>
         </div>
+        <div style="border:1px solid var(--border);border-radius:var(--radius);padding:12px;background:var(--bg);margin-bottom:12px;">
+            <label class="field" style="margin:0;">
+                <span>AI 生成模板</span>
+                <span class="field-hint">用一句话描述你想要的模板效果，AI 自动生成名称和提示词并填入下方表单</span>
+            </label>
+            <div style="display:flex;gap:8px;">
+                <input type="text" id="tpl-gen-desc" placeholder="如：把文章改成小红书风格的笔记" style="flex:1;font-size:0.85rem;">
+                <button type="button" class="btn btn-primary btn-sm" id="tpl-gen-btn" onclick="aiGenerateTemplate()" style="white-space:nowrap;">生成</button>
+            </div>
+        </div>
         <form id="template-form" onsubmit="saveTemplate(event)" style="border:1px solid var(--border);border-radius:var(--radius);padding:12px;background:var(--bg);">
             <input type="hidden" id="tpl-edit-id">
             <label class="field">
@@ -238,6 +248,34 @@ async function updateTemplate(id) {
 
 function cancelEditTemplate() {
     resetTemplateForm();
+}
+
+async function aiGenerateTemplate() {
+    const descInput = document.getElementById('tpl-gen-desc');
+    const description = descInput.value.trim();
+    if (!description) { alert('请先描述你想要的模板效果'); return; }
+
+    const btn = document.getElementById('tpl-gen-btn');
+    btn.disabled = true;
+    btn.textContent = '生成中...';
+
+    try {
+        const resp = await fetch('/api/ai/generate-template', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+            body: JSON.stringify({description})
+        });
+        const result = await resp.json();
+        if (result.error) { alert(result.error); return; }
+        if (result.name) document.getElementById('tpl-name').value = result.name;
+        if (result.prompt) document.getElementById('tpl-prompt').value = result.prompt;
+        document.getElementById('template-form').scrollIntoView({behavior:'smooth'});
+    } catch (e) {
+        alert('生成失败: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '生成';
+    }
 }
 
 function resetTemplateForm() {

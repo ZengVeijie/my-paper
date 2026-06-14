@@ -767,6 +767,46 @@ function save_user_ai_templates(array $templates): void {
     json_write($path, $user);
 }
 
+function handle_ai_generate_template(): void {
+    require_login();
+    $data = body_json();
+    $description = trim($data['description'] ?? '');
+    if (empty($description)) json_response(['error' => '请描述你想要的模板效果'], 400);
+
+    $result = call_deepseek(
+        '你是一个 AI 提示词专家。用户描述想要的写作辅助效果，你生成一个模板名称和一段系统提示词。
+提示词中必须用 {{text}} 作为输入文字的占位符。提示词用中文写，要求具体、可操作，长度适中。
+返回纯JSON对象，如：{"name":"鲁迅风格改写","prompt":"用鲁迅的文风改写以下文字，保留原意但使用鲁迅标志性的冷峻、简练和讽刺语气：\\n\\n{{text}}"}
+只输出JSON对象，不要有其他文字。',
+        $description,
+        0.7,
+        512
+    );
+
+    if (isset($result['error'])) json_response($result, 500);
+
+    $ai_text = $result['text'] ?? '{}';
+    $generated = json_decode($ai_text, true);
+    if (!is_array($generated) || empty($generated['prompt'])) {
+        if (preg_match('/\{[^}]+\}/s', $ai_text, $m)) {
+            $generated = json_decode($m[0], true);
+        }
+    }
+    if (!is_array($generated) || empty($generated['prompt'])) {
+        json_response(['error' => '生成失败，请尝试更具体地描述需求'], 500);
+    }
+
+    // 确保 prompt 中包含占位符
+    if (strpos($generated['prompt'], '{{text}}') === false) {
+        $generated['prompt'] .= "\n\n{{text}}";
+    }
+
+    json_response([
+        'name' => $generated['name'] ?? '自定义模板',
+        'prompt' => $generated['prompt'],
+    ]);
+}
+
 function handle_ai_list_templates(): void {
     require_login();
     json_response(get_user_ai_templates());

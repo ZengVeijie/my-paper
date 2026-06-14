@@ -333,6 +333,7 @@ $router->post('/api/ai/continue', 'handle_ai_continue');
 $router->post('/api/ai/suggest-tags', 'handle_ai_suggest_tags');
 $router->post('/api/ai/suggest-title', 'handle_ai_suggest_title');
 $router->post('/api/ai/highlights', 'handle_ai_highlights');
+$router->post('/api/ai/generate-template', 'handle_ai_generate_template');
 $router->get('/api/ai/templates', 'handle_ai_list_templates');
 $router->post('/api/ai/templates', 'handle_ai_create_template');
 $router->put('/api/ai/templates/{id}', 'handle_ai_update_template');
