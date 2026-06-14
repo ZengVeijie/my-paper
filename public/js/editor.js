@@ -823,7 +823,7 @@ function updateAIReference() {
         refEl.innerHTML = '<span class="ref-label">已选中 ' + sel.length + ' 个字：</span><span class="ref-text">' + esc(sel.substring(0, 80)) + (sel.length > 80 ? '...' : '') + '</span>';
         refEl.style.display = 'block';
     } else {
-        refEl.innerHTML = '<span class="ref-label">当前操作：全文</span>';
+        refEl.innerHTML = '<span class="ref-label">当前操作：全文（' + textarea.value.length + ' 字）</span>';
         refEl.style.display = 'block';
     }
 }
