@@ -1,6 +1,6 @@
 <?php
 /**
- * My Paper - DeepSeek AI 集成
+ * 平静之心 - DeepSeek AI 集成
  */
 
 require_once __DIR__ . '/helpers.php';
@@ -685,6 +685,39 @@ function handle_ai_suggest_tags(): void {
     }
 
     json_response(['tags' => is_array($tags) ? array_slice($tags, 0, 5) : []]);
+}
+
+// ==================== 标题建议 ====================
+
+function handle_ai_suggest_title(): void {
+    require_login();
+    $data = body_json();
+    $content = trim($data['content'] ?? '');
+    if (empty($content)) json_response(['error' => '请提供文章内容'], 400);
+
+    $len = function_exists('mb_strlen') ? mb_strlen($content) : strlen($content);
+    $text_for_api = $len > 2000
+        ? (function_exists('mb_substr') ? mb_substr($content, 0, 2000) : substr($content, 0, 2000))
+        : $content;
+
+    $result = call_deepseek(
+        '你是一个文章标题助手。根据文章内容推荐3个标题，每个标题10-20字，风格多样（如诗意、简洁、悬念等）。返回纯JSON数组，如：["秋日洱海边的思绪","大理三日漫游记","那时我看见风穿过麦田"]。只输出JSON数组。',
+        $text_for_api,
+        0.7,
+        256
+    );
+
+    if (isset($result['error'])) json_response($result, 500);
+
+    $ai_text = $result['text'] ?? '[]';
+    $titles = json_decode($ai_text, true);
+    if (!is_array($titles)) {
+        if (preg_match('/\[[^\]]*\]/', $ai_text, $m)) {
+            $titles = json_decode($m[0], true);
+        }
+    }
+
+    json_response(['titles' => is_array($titles) ? array_slice($titles, 0, 3) : []]);
 }
 
 // ==================== 金句提取 ====================

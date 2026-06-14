@@ -1,6 +1,6 @@
 <?php
 /**
- * My Paper - 入口文件
+ * 平静之心 - 入口文件
  */
 
 require_once __DIR__ . '/config.php';
@@ -331,6 +331,7 @@ $router->post('/api/ai/period-summary', 'handle_ai_period_summary');
 $router->post('/api/ai/writing-insights', 'handle_ai_writing_insights');
 $router->post('/api/ai/continue', 'handle_ai_continue');
 $router->post('/api/ai/suggest-tags', 'handle_ai_suggest_tags');
+$router->post('/api/ai/suggest-title', 'handle_ai_suggest_title');
 $router->post('/api/ai/highlights', 'handle_ai_highlights');
 $router->get('/api/ai/templates', 'handle_ai_list_templates');
 $router->post('/api/ai/templates', 'handle_ai_create_template');

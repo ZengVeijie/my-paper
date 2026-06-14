@@ -1466,6 +1466,55 @@ async function aiSuggestTags() {
     }
 }
 
+// ===== 标题建议 =====
+async function aiSuggestTitle() {
+    const content = document.getElementById('article-content').value;
+    if (!content.trim()) { alert('请先书写文章内容'); return; }
+
+    updateAIReference();
+    addAIMessage('user', '[标题建议] 分析文章中...');
+    addAIMessage('system', '思考中...');
+
+    try {
+        const resp = await fetch('/api/ai/suggest-title', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+            body: JSON.stringify({content})
+        });
+        const result = await resp.json();
+
+        const msgs = document.querySelectorAll('#ai-messages .ai-msg.system');
+        msgs.forEach(m => { if (m.textContent === '思考中...') m.remove(); });
+
+        if (result.titles && result.titles.length) {
+            const titleInput = document.getElementById('article-title');
+            const container = document.getElementById('ai-messages');
+            const wrapper = document.createElement('div');
+            wrapper.className = 'ai-msg-wrapper';
+            wrapper.innerHTML = `<div class="ai-msg assistant" style="display:flex;flex-direction:column;gap:6px;">
+                <span style="font-size:0.8rem;color:var(--text-muted);">推荐标题：</span>
+                ${result.titles.map(t => `<button class="btn btn-sm" style="text-align:left;justify-content:flex-start;" onclick="applySuggestedTitle(this)">${esc(t)}</button>`).join('')}
+            </div>`;
+            container.appendChild(wrapper);
+            container.scrollTop = container.scrollHeight;
+        } else if (result.error) {
+            addAIMessage('system', '错误: ' + result.error);
+        } else {
+            addAIMessage('system', '未能生成标题');
+        }
+    } catch (err) {
+        const msgs = document.querySelectorAll('#ai-messages .ai-msg.system');
+        msgs.forEach(m => { if (m.textContent === '思考中...') m.remove(); });
+        addAIMessage('system', '请求失败: ' + err.message);
+    }
+}
+
+function applySuggestedTitle(btn) {
+    const titleInput = document.getElementById('article-title');
+    titleInput.value = btn.textContent;
+    titleInput.focus();
+}
+
 function addSuggestedTag(chip) {
     const tag = chip.dataset.tag;
     const tagsInput = document.getElementById('article-tags');

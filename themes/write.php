@@ -116,6 +116,7 @@ $article_id = $article['id'] ?? '';
                     <button class="btn btn-sm" onclick="aiAction('summary')" title="生成文章摘要">摘要</button>
                     <button class="btn btn-sm" onclick="aiHighlights()" title="提取文章金句">金句</button>
                     <button class="btn btn-sm" onclick="aiContinue()" title="从光标处续写下一段">续写</button>
+                    <button class="btn btn-sm" onclick="aiSuggestTitle()" title="AI 推荐标题">标题</button>
                     <button class="btn btn-sm" onclick="aiSuggestTags()" title="AI 推荐标签">标签</button>
                 </div>
                 <div class="ai-templates" id="ai-templates" style="display:none;padding:0 0 4px;margin-bottom:4px;">
