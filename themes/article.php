@@ -65,7 +65,7 @@ $is_faved = in_array($article['id'], $user['favorite_article_ids'] ?? []);
             <h2>留言 (<?= count($comments) ?>)</h2>
         </div>
         <div class="comment-form">
-            <div id="quoted-preview" style="display:none;background:var(--bg);padding:8px 10px;border-radius:var(--radius);margin-bottom:6px;font-size:0.85rem;color:var(--text-muted);border-left:3px solid var(--accent);max-height:80px;overflow-y:auto;white-space:pre-wrap;position:relative;padding-right:60px;"><span id="quoted-preview-text"></span><button onclick="clearQuotedText()" title="取消引用" style="position:absolute;top:4px;right:6px;background:var(--bg-card);border:1px solid var(--border);border-radius:3px;font-size:0.75rem;color:var(--text-muted);cursor:pointer;line-height:1.3;padding:1px 6px;">取消引用</button></div>
+            <div id="quoted-preview" style="display:none;background:var(--bg);padding:8px 10px;border-radius:var(--radius);margin-bottom:6px;font-size:0.85rem;color:var(--text-muted);border-left:3px solid var(--accent);max-height:80px;overflow-y:auto;white-space:pre-wrap;position:relative;padding-right:60px;"><span id="quoted-preview-text"></span><button onclick="clearQuotedText()" title="取消引用" style="position:absolute;top:4px;right:6px;background:var(--bg-card);border:1px solid var(--border);border-radius:3px;font-size:0.85rem;color:var(--text-muted);cursor:pointer;line-height:1.2;padding:0 5px;">&times;</button></div>
             <textarea id="comment-input" rows="2" placeholder="写下你的想法..." onkeydown="if(event.key==='Escape')clearQuotedText()"></textarea>
             <button class="btn btn-primary btn-sm" onclick="postComment('<?= h($article['id']) ?>', null)">发表</button>
         </div>
