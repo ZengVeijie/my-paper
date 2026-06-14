@@ -1,5 +1,5 @@
 /**
- * My Paper - 主应用脚本
+ * 平静之心 - 主应用脚本
  */
 
 // Subdirectory deployment helpers
@@ -107,7 +107,9 @@ function renderMarkdown() {
     document.querySelectorAll('.rendered-content').forEach(el => {
         const raw = el.textContent || el.innerHTML;
         if (raw.trim() && !el.dataset.rendered) {
-            el.innerHTML = marked.parse(raw);
+            // 与编辑器预览保持一致的预处理：多换行 → <br> 段落
+            let processed = raw.replace(/\r?\n/g, '\n').replace(/\n{3,}/g, m => '\n\n' + '<br>'.repeat(m.length - 2) + '\n\n');
+            el.innerHTML = marked.parse(processed);
             el.dataset.rendered = '1';
         }
     });

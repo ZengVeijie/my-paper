@@ -51,7 +51,8 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.rendered-content').forEach(el => {
             const raw = el.textContent;
             if (raw.trim()) {
-                el.innerHTML = marked.parse(raw);
+                let processed = raw.replace(/\r?\n/g, '\n').replace(/\n{3,}/g, m => '\n\n' + '<br>'.repeat(m.length - 2) + '\n\n');
+                el.innerHTML = marked.parse(processed);
             }
         });
     }

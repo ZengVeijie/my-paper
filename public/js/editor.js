@@ -124,8 +124,8 @@ function initEditor() {
         const md = textarea.value;
         if (md.trim() && typeof marked !== 'undefined') {
             if (previewEmpty) previewEmpty.style.display = 'none';
-            // 连续3个以上换行 → 每多一个换行插一个 <br>（放在段落内而非段落间，确保跨浏览器一致）
-            let processed = md.replace(/\r?\n/g, '\n').replace(/\n{3,}/g, m => '<br>'.repeat(m.length - 2) + '\n\n');
+            // 连续3个以上换行 → 每多一个换行插一个独立 <br> 段落（\n\n 隔离，避免污染相邻块语法）
+            let processed = md.replace(/\r?\n/g, '\n').replace(/\n{3,}/g, m => '\n\n' + '<br>'.repeat(m.length - 2) + '\n\n');
             preview.innerHTML = marked.parse(processed);
         } else if (md.trim()) {
             if (previewEmpty) previewEmpty.style.display = 'none';
