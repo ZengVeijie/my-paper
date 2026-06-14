@@ -1454,6 +1454,7 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
     flex: 4;
     min-width: 200px;
     position: relative;
+    overflow-y: auto;
 }
 
 .editor-container.three-col .ai-panel {
@@ -1502,6 +1503,7 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
     flex: 1;
     min-width: 300px;
     position: relative;
+    overflow-y: auto;
 }
 
 .editor-container:not(.three-col) .ai-panel {

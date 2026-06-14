@@ -57,15 +57,15 @@ function initMobileEditor() {
         // 切换到预览时触发渲染
         if (tabName === 'preview') {
             const textarea = document.getElementById('article-content');
-            const preview = document.getElementById('preview-pane');
+            const previewContent = document.getElementById('preview-content');
             const previewEmpty = document.getElementById('preview-empty');
-            if (textarea && preview && typeof marked !== 'undefined') {
+            if (textarea && previewContent && typeof marked !== 'undefined') {
                 if (textarea.value.trim()) {
                     if (previewEmpty) previewEmpty.style.display = 'none';
-                    preview.innerHTML = marked.parse(textarea.value);
+                    previewContent.innerHTML = marked.parse(textarea.value);
                 } else {
                     if (previewEmpty) previewEmpty.style.display = '';
-                    preview.innerHTML = '';
+                    previewContent.innerHTML = '';
                 }
             }
         }
@@ -110,10 +110,11 @@ let lastAutoSaveContent = '';
 
 function initEditor() {
     const textarea = document.getElementById('article-content');
-    const preview = document.getElementById('preview-pane');
+    const previewPane = document.getElementById('preview-pane');
+    const previewContent = document.getElementById('preview-content');
     const previewEmpty = document.getElementById('preview-empty');
 
-    if (!textarea || !preview) return;
+    if (!textarea || !previewPane || !previewContent) return;
 
     // 离开编辑器时保存选中范围，以便 AI 操作能获取选中文字
     textarea.addEventListener('blur', () => {
@@ -128,10 +129,10 @@ function initEditor() {
             if (previewEmpty) previewEmpty.style.display = 'none';
             // 连续3个以上换行 → 每多一个换行插一个独立 <br> 段落（\n\n 隔离，避免污染相邻块语法）
             let processed = md.replace(/\r?\n/g, '\n').replace(/\n{3,}/g, m => '\n\n' + '<br>'.repeat(m.length - 2) + '\n\n');
-            preview.innerHTML = marked.parse(processed);
+            previewContent.innerHTML = marked.parse(processed);
         } else if (md.trim()) {
             if (previewEmpty) previewEmpty.style.display = 'none';
-            preview.innerHTML = '<p style="color:var(--text-muted)">Markdown 渲染库加载中...</p>';
+            previewContent.innerHTML = '<p style="color:var(--text-muted)">Markdown 渲染库加载中...</p>';
         } else {
             if (previewEmpty) previewEmpty.style.display = '';
         }
@@ -149,12 +150,12 @@ function initEditor() {
             _previewSyncPending = false;
             const totalLen = textarea.value.length;
             if (!totalLen) return;
-            const maxScroll = preview.scrollHeight - preview.clientHeight;
+            const maxScroll = previewPane.scrollHeight - previewPane.clientHeight;
             if (maxScroll <= 0) return;
             const pos = textarea.selectionStart;
             const ratio = pos / totalLen;
-            const target = ratio * preview.scrollHeight - preview.clientHeight / 2;
-            preview.scrollTop = Math.max(0, Math.min(target, maxScroll));
+            const target = ratio * previewPane.scrollHeight - previewPane.clientHeight / 2;
+            previewPane.scrollTop = Math.max(0, Math.min(target, maxScroll));
         });
     }
     textarea.addEventListener('keyup', syncPreviewScroll);
@@ -164,9 +165,9 @@ function initEditor() {
         const maxScroll = textarea.scrollHeight - textarea.clientHeight;
         if (maxScroll <= 0) return;
         const ratio = textarea.scrollTop / maxScroll;
-        const previewMax = preview.scrollHeight - preview.clientHeight;
+        const previewMax = previewPane.scrollHeight - previewPane.clientHeight;
         if (previewMax <= 0) return;
-        preview.scrollTop = ratio * previewMax;
+        previewPane.scrollTop = ratio * previewMax;
     });
 
     // 若 marked 尚未加载（CDN 延迟），等待后重试
