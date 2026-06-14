@@ -1555,25 +1555,63 @@ function addSuggestedTag(chip) {
 }
 
 // ===== 自定义模板 =====
+let _allTemplates = [];
+let _selectedTemplateId = '';
+
 document.addEventListener('DOMContentLoaded', loadAITemplates);
 async function loadAITemplates() {
     try {
         const resp = await fetch('/api/ai/templates', {headers:{'X-Requested-With':'XMLHttpRequest'}});
         const templates = await resp.json();
         const container = document.getElementById('ai-templates');
-        const select = document.getElementById('ai-template-select');
-        if (!container || !select) return;
+        if (!container) return;
         if (!templates.length) return;
         container.style.display = 'flex';
-        select.innerHTML = '<option value="">自定义模板...</option>' +
-            templates.map(t => '<option value="' + t.id + '">' + esc(t.name) + '</option>').join('');
+        _allTemplates = templates;
+
+        const input = document.getElementById('ai-template-input');
+        const dropdown = document.getElementById('ai-template-dropdown');
+        if (input) {
+            input.value = '';
+            input.placeholder = '搜索模板...';
+            input.addEventListener('input', filterTemplateDropdown);
+            input.addEventListener('focus', () => { if (_allTemplates.length) filterTemplateDropdown(); });
+            input.addEventListener('blur', () => { setTimeout(() => { if (dropdown) dropdown.style.display = 'none'; }, 150); });
+        }
     } catch(e) {}
 }
 
+function filterTemplateDropdown() {
+    const input = document.getElementById('ai-template-input');
+    const dropdown = document.getElementById('ai-template-dropdown');
+    if (!input || !dropdown) return;
+    const q = input.value.trim().toLowerCase();
+
+    const filtered = q ? _allTemplates.filter(t => t.name.toLowerCase().includes(q)) : _allTemplates;
+    if (!filtered.length) {
+        dropdown.innerHTML = '<div style="padding:6px 8px;font-size:0.75rem;color:var(--text-muted);">无匹配模板</div>';
+    } else {
+        dropdown.innerHTML = filtered.map(t =>
+            `<div class="tpl-dropdown-item" data-id="${t.id}" style="padding:6px 8px;cursor:pointer;font-size:0.78rem;border-bottom:1px solid var(--border-light);" onmousedown="event.preventDefault();selectTemplateItem(this)">${esc(t.name)}</div>`
+        ).join('');
+    }
+    dropdown.style.display = '';
+}
+
+function selectTemplateItem(el) {
+    const id = el.dataset.id;
+    const tpl = _allTemplates.find(t => t.id === id);
+    if (!tpl) return;
+    _selectedTemplateId = id;
+    const input = document.getElementById('ai-template-input');
+    const dropdown = document.getElementById('ai-template-dropdown');
+    if (input) input.value = tpl.name;
+    if (dropdown) dropdown.style.display = 'none';
+}
+
 async function aiUseTemplate() {
-    const select = document.getElementById('ai-template-select');
-    const tplId = select.value;
-    if (!tplId) return;
+    const tplId = _selectedTemplateId;
+    if (!tplId) { alert('请先搜索并选择一个模板'); return; }
 
     const textarea = document.getElementById('article-content');
     let selStart = textarea.selectionStart;
@@ -1587,7 +1625,7 @@ async function aiUseTemplate() {
     if (!text.trim()) { alert('请先选中文字或书写内容'); return; }
 
     updateAIReference();
-    const tplName = select.options[select.selectedIndex].text;
+    const tplName = document.getElementById('ai-template-input').value || '自定义模板';
     addAIMessage('user', '[模板: ' + tplName + '] ' + (sel ? '处理选中文字...' : '处理全文...'));
     addAIMessage('system', '处理中...');
 

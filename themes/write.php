@@ -119,10 +119,9 @@ $article_id = $article['id'] ?? '';
                     <button class="btn btn-sm" onclick="aiSuggestTitle()" title="AI 推荐标题">标题</button>
                     <button class="btn btn-sm" onclick="aiSuggestTags()" title="AI 推荐标签">标签</button>
                 </div>
-                <div class="ai-templates" id="ai-templates" style="display:none;padding:0 0 4px;margin-bottom:4px;">
-                    <select id="ai-template-select" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-ui);font-size:0.78rem;background:var(--bg-card);max-width:140px;">
-                        <option value="">自定义模板...</option>
-                    </select>
+                <div class="ai-templates" id="ai-templates" style="display:none;padding:0 0 4px;margin-bottom:4px;position:relative;">
+                    <input type="text" id="ai-template-input" placeholder="搜索模板..." autocomplete="off" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-ui);font-size:0.78rem;background:var(--bg-card);max-width:140px;">
+                    <div id="ai-template-dropdown" style="display:none;position:absolute;top:100%;left:0;min-width:200px;max-height:180px;overflow-y:auto;background:var(--bg-card);border:1px solid var(--border);border-radius:0 0 var(--radius) var(--radius);box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:1200;"></div>
                     <button class="btn btn-sm" onclick="aiUseTemplate()" style="font-size:0.75rem;">使用</button>
                 </div>
                 <div class="ai-chat" id="ai-chat">

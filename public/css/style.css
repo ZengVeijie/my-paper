@@ -1953,3 +1953,6 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
     transform: scale(1.15);
     box-shadow: 0 1px 4px rgba(0,0,0,0.2);
 }
+
+/* ===== 模板搜索下拉 ===== */
+.tpl-dropdown-item:hover { background: var(--border-light); color: var(--text); }
