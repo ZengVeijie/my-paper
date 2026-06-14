@@ -161,7 +161,8 @@ async function submitAIQuery() {
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             body: JSON.stringify({
                 question: question + '\n\n选中的文字：' + aiQuerySelection,
-                article_content: ''
+                article_content: '',
+                mode: 'reader'
             })
         });
         const result = await resp.json();
