@@ -357,7 +357,15 @@ function toolbarAction(textarea, action) {
             doReplace(textarea, tableMd, start, end, start + tableMd.length);
             return;
         case 'hr': before = '\n---\n'; break;
-        case 'indent': before = '　　'; break;
+        case 'indent':
+            if (sel && sel.includes('\n')) {
+                const lines = sel.split('\n');
+                const indented = lines.map(l => '　　' + l).join('\n');
+                doReplace(textarea, indented, start, end, start + indented.length);
+                return;
+            }
+            before = '　　';
+            break;
         case 'latex-inline': before = '$'; after = '$'; break;
         case 'latex-block': before = '$$\n'; after = '\n$$'; break;
         case 'color':
