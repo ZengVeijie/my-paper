@@ -1,12 +1,29 @@
 <?php
 /**
- * My Paper - 备份导出 & 分享
+ * 平静之心 - 备份导出 & 分享
  */
 
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/auth.php';
 
 // ==================== 导出 ====================
+
+function handle_export_templates(): void {
+    require_login();
+    $user = current_user();
+    $templates = $user['ai_templates'] ?? [];
+
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="My_Paper_templates.csv"');
+    $fp = fopen('php://output', 'w');
+    fwrite($fp, "\xEF\xBB\xBF"); // BOM for Excel compatibility
+    fputcsv($fp, ['名称', '提示词']);
+    foreach ($templates as $t) {
+        fputcsv($fp, [$t['name'] ?? '未命名', $t['prompt'] ?? '']);
+    }
+    fclose($fp);
+    exit;
+}
 
 /**
  * 解析 Markdown 中的图片引用，将本地图片 URL 改写为 images/xxx.ext，

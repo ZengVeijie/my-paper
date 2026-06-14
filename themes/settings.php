@@ -105,6 +105,7 @@
         <p class="section-desc">导出你的数据为 Markdown 或 ZIP 包</p>
         <div class="export-actions">
             <a href="#" class="btn" onclick="exportAllData();return false">导出全部数据 (ZIP)</a>
+            <a href="/api/export/templates" class="btn">导出模板数据 (CSV)</a>
             <span class="field-hint" style="margin-left:8px;">文章列表中可多选批量导出</span>
         </div>
     </section>

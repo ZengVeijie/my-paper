@@ -299,6 +299,7 @@ $router->post('/api/upload', function() {
 
 $router->post('/api/export/batch', 'handle_export_batch');
 $router->get('/api/export/all', 'handle_export_all');
+$router->get('/api/export/templates', 'handle_export_templates');
 $router->get('/api/export/collection/{id}/preview', 'handle_preview_collection_pdf');
 $router->get('/api/export/collection/{id}/pdf', 'handle_export_collection_pdf');
 $router->get('/api/export/{article_id}', 'handle_export_article');
