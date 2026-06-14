@@ -65,7 +65,7 @@ $is_faved = in_array($article['id'], $user['favorite_article_ids'] ?? []);
             <h2>留言 (<?= count($comments) ?>)</h2>
         </div>
         <div class="comment-form">
-            <div id="quoted-preview" style="display:none;background:var(--bg);padding:8px 10px;border-radius:var(--radius);margin-bottom:6px;font-size:0.85rem;color:var(--text-muted);border-left:3px solid var(--accent);max-height:80px;overflow-y:auto;white-space:pre-wrap;"></div>
+            <div id="quoted-preview" style="display:none;background:var(--bg);padding:8px 10px;border-radius:var(--radius);margin-bottom:6px;font-size:0.85rem;color:var(--text-muted);border-left:3px solid var(--accent);max-height:80px;overflow-y:auto;white-space:pre-wrap;position:relative;padding-right:28px;"><button onclick="clearQuotedText()" title="取消引用" style="position:absolute;top:4px;right:4px;background:none;border:none;font-size:1rem;color:var(--text-muted);cursor:pointer;line-height:1;padding:2px 4px;">&times;</button>
             <textarea id="comment-input" rows="2" placeholder="写下你的想法..." onkeydown="if(event.key==='Escape')clearQuotedText()"></textarea>
             <button class="btn btn-primary btn-sm" onclick="postComment('<?= h($article['id']) ?>', null)">发表</button>
         </div>
