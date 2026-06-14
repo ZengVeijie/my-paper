@@ -86,6 +86,9 @@ $article_id = $article['id'] ?? '';
 
         <!-- 中栏：预览 -->
         <div class="preview-pane rendered-content" id="preview-pane">
+            <button id="sync-scroll-toggle" class="sync-scroll-toggle" title="切换预览跟随（当前：跟随中）" onclick="toggleSyncScroll()">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="3" x2="8" y2="16"/><line x1="8" y1="10" x2="3" y2="10"/><line x1="16" y1="3" x2="16" y2="13"/><line x1="16" y1="10" x2="21" y2="10"/></svg>
+            </button>
             <div class="preview-empty" id="preview-empty">
                 <svg class="preview-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 <span>书写左侧内容后将实时显示</span>

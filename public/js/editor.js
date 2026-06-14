@@ -2,6 +2,8 @@
  * 平静之心 - 编辑器 & AI 助手
  */
 
+let _previewSyncEnabled = true;
+
 document.addEventListener('DOMContentLoaded', () => {
     initEditor();
     initAI();
@@ -141,7 +143,7 @@ function initEditor() {
     // 预览滚动同步：光标所在位置对应的预览内容保持在视线中部
     let _previewSyncPending = false;
     function syncPreviewScroll() {
-        if (_previewSyncPending) return;
+        if (!_previewSyncEnabled || _previewSyncPending) return;
         _previewSyncPending = true;
         requestAnimationFrame(() => {
             _previewSyncPending = false;
@@ -158,6 +160,7 @@ function initEditor() {
     textarea.addEventListener('keyup', syncPreviewScroll);
     textarea.addEventListener('click', syncPreviewScroll);
     textarea.addEventListener('scroll', () => {
+        if (!_previewSyncEnabled) return;
         const maxScroll = textarea.scrollHeight - textarea.clientHeight;
         if (maxScroll <= 0) return;
         const ratio = textarea.scrollTop / maxScroll;
@@ -1903,3 +1906,16 @@ function closeRefPopup() {
 window.addEventListener('resize', () => {
     if (_refPopup && _refPopup.style.display !== 'none') positionRefPopupRef();
 });
+
+function toggleSyncScroll() {
+    _previewSyncEnabled = !_previewSyncEnabled;
+    const btn = document.getElementById('sync-scroll-toggle');
+    if (!btn) return;
+    if (_previewSyncEnabled) {
+        btn.classList.remove('off');
+        btn.title = '切换预览跟随（当前：跟随中）';
+    } else {
+        btn.classList.add('off');
+        btn.title = '切换预览跟随（当前：已暂停）';
+    }
+}
