@@ -135,8 +135,36 @@ function initEditor() {
         }
     }
 
-    textarea.addEventListener('input', () => { editorDirty = true; updatePreview(); });
+    textarea.addEventListener('input', () => { editorDirty = true; updatePreview(); syncPreviewScroll(); });
     updatePreview();
+
+    // 预览滚动同步：光标所在位置对应的预览内容保持在视线中部
+    let _previewSyncPending = false;
+    function syncPreviewScroll() {
+        if (_previewSyncPending) return;
+        _previewSyncPending = true;
+        requestAnimationFrame(() => {
+            _previewSyncPending = false;
+            const totalLen = textarea.value.length;
+            if (!totalLen) return;
+            const maxScroll = preview.scrollHeight - preview.clientHeight;
+            if (maxScroll <= 0) return;
+            const pos = textarea.selectionStart;
+            const ratio = pos / totalLen;
+            const target = ratio * preview.scrollHeight - preview.clientHeight / 2;
+            preview.scrollTop = Math.max(0, Math.min(target, maxScroll));
+        });
+    }
+    textarea.addEventListener('keyup', syncPreviewScroll);
+    textarea.addEventListener('click', syncPreviewScroll);
+    textarea.addEventListener('scroll', () => {
+        const maxScroll = textarea.scrollHeight - textarea.clientHeight;
+        if (maxScroll <= 0) return;
+        const ratio = textarea.scrollTop / maxScroll;
+        const previewMax = preview.scrollHeight - preview.clientHeight;
+        if (previewMax <= 0) return;
+        preview.scrollTop = ratio * previewMax;
+    });
 
     // 若 marked 尚未加载（CDN 延迟），等待后重试
     if (typeof marked === 'undefined') {
