@@ -6,7 +6,7 @@ $total_pages = $total_pages ?? 1;
 $total = $total ?? 0;
 ?>
 <div class="page-header">
-    <h1>日记</h1>
+    <h1>首页</h1>
     <div class="page-actions">
         <a href="/write" class="btn btn-primary">写新文章</a>
     </div>
