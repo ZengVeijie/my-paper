@@ -683,8 +683,9 @@ function initUpload() {
 
 // ===== AI 助手 =====
 
-// Track the last AI result for potential replacement
-let lastAIResult = null;
+// Track per-result data so multiple results coexist and survive undo
+const _aiResultData = new Map();
+let _aiResultId = 0;
 let lastAIAction = null;
 let lastAISelection = null;
 // Persist text selection across tab switches (mobile fix)
@@ -885,21 +886,24 @@ async function aiAction(action) {
 
         if (result.text || result.result) {
             const output = result.text || result.result;
-            lastAIResult = output;
 
             // Show result with action buttons
             const container = document.getElementById('ai-messages');
             const wrapper = document.createElement('div');
             wrapper.className = 'ai-msg-wrapper';
+            const rid = ++_aiResultId;
+            wrapper.dataset.resultId = rid;
+            _aiResultData.set(rid, { text: output, sel: lastAISelection });
+            const selLabel = lastAISelection ? '选中文字' : '全文';
             wrapper.innerHTML = `
                 <div class="ai-msg assistant">${esc(output)}</div>
                 <div class="ai-msg-actions">
                     ${(action === 'polish' || action === 'style' || action === 'translate' || action === 'format') ? `
-                        <button class="btn btn-sm btn-primary" onclick="replaceAIResult()">替换${lastAISelection ? '选中文字' : '全文'}</button>
-                        <button class="btn btn-sm" onclick="insertAIResult()">追加到文末</button>
+                        <button class="btn btn-sm btn-primary" onclick="replaceAIResult(this)">替换${selLabel}</button>
+                        <button class="btn btn-sm" onclick="insertAIResult(this)">追加到文末</button>
                     ` : ''}
                     ${action === 'summary' ? `
-                        <button class="btn btn-sm btn-primary" onclick="applySummary()">设为摘要</button>
+                        <button class="btn btn-sm btn-primary" onclick="applySummary(this)">设为摘要</button>
                     ` : ''}
                 </div>
             `;
@@ -907,47 +911,51 @@ async function aiAction(action) {
             container.scrollTop = container.scrollHeight;
         } else if (result.error) {
             addAIMessage('system', '错误: ' + result.error);
-            lastAIResult = null;
         }
     } catch (err) {
         const msgs = document.querySelectorAll('#ai-messages .ai-msg.system');
         msgs.forEach(m => { if (m.textContent === '处理中...') m.remove(); });
         addAIMessage('system', '请求失败: ' + err.message);
-        lastAIResult = null;
     }
 }
 
-function replaceAIResult() {
-    if (!lastAIResult) return;
+function getResultData(wrapper) {
+    const id = wrapper && wrapper.dataset && wrapper.dataset.resultId;
+    return id ? _aiResultData.get(parseInt(id)) : null;
+}
+
+function replaceAIResult(btn) {
+    const wrapper = btn.closest('.ai-msg-wrapper');
+    const data = getResultData(wrapper);
+    if (!data) return;
     const textarea = document.getElementById('article-content');
     textarea.focus();
-    if (lastAISelection) {
-        textarea.setSelectionRange(lastAISelection.start, lastAISelection.end);
+    if (data.sel) {
+        textarea.setSelectionRange(data.sel.start, data.sel.end);
     } else {
         textarea.select();
     }
-    document.execCommand('insertText', false, lastAIResult);
+    document.execCommand('insertText', false, data.text);
     textarea.dispatchEvent(new Event('input'));
-    lastAIResult = null;
-    lastAISelection = null;
 }
 
-function insertAIResult() {
-    if (!lastAIResult) return;
+function insertAIResult(btn) {
+    const wrapper = btn.closest('.ai-msg-wrapper');
+    const data = getResultData(wrapper);
+    if (!data) return;
     const textarea = document.getElementById('article-content');
     textarea.focus();
     const end = textarea.value.length;
     textarea.setSelectionRange(end, end);
-    document.execCommand('insertText', false, '\n\n' + lastAIResult);
+    document.execCommand('insertText', false, '\n\n' + data.text);
     textarea.dispatchEvent(new Event('input'));
-    lastAIResult = null;
-    lastAISelection = null;
 }
 
-function applySummary() {
-    if (!lastAIResult) return;
-    document.getElementById('article-summary').value = lastAIResult;
-    lastAIResult = null;
+function applySummary(btn) {
+    const wrapper = btn.closest('.ai-msg-wrapper');
+    const data = getResultData(wrapper);
+    if (!data) return;
+    document.getElementById('article-summary').value = data.text;
 }
 
 async function aiChat() {
@@ -1326,23 +1334,21 @@ async function doContinue(direction) {
         msgs.forEach(m => { if (m.textContent === '续写中...') m.remove(); });
 
         if (result.text) {
-            lastAIResult = result.text;
-            const textarea = document.getElementById('article-content');
-            if (window._continueHasSelection) {
-                lastAISelection = {start: window._continueSelStart, end: window._continueSelEnd};
-            } else {
-                lastAISelection = null;
-            }
+            const sel = window._continueHasSelection ? {start: window._continueSelStart, end: window._continueSelEnd} : null;
 
             const container = document.getElementById('ai-messages');
             const wrapper = document.createElement('div');
             wrapper.className = 'ai-msg-wrapper';
+            const rid = ++_aiResultId;
+            wrapper.dataset.resultId = rid;
+            _aiResultData.set(rid, { text: result.text, sel: sel });
+            const selLabel = sel ? '选中文字' : '全文';
             wrapper.innerHTML = `
                 <div class="ai-msg assistant">${esc(result.text)}</div>
                 <div class="ai-msg-actions">
-                    <button class="btn btn-sm btn-primary" onclick="replaceAIResult()">替换${lastAISelection ? '选中文字' : '全文'}</button>
-                    <button class="btn btn-sm" onclick="insertAIResult()">追加到文末</button>
-                    ${!window._continueHasSelection ? `<button class="btn btn-sm" onclick="insertContinueResult()">插入到光标处</button>` : ''}
+                    <button class="btn btn-sm btn-primary" onclick="replaceAIResult(this)">替换${selLabel}</button>
+                    <button class="btn btn-sm" onclick="insertAIResult(this)">追加到文末</button>
+                    ${!window._continueHasSelection ? `<button class="btn btn-sm" onclick="insertContinueResult(this)">插入到光标处</button>` : ''}
                 </div>
             `;
             container.appendChild(wrapper);
@@ -1361,15 +1367,16 @@ async function doContinue(direction) {
     window._continueHasSelection = null;
 }
 
-function insertContinueResult() {
-    if (!lastAIResult) return;
+function insertContinueResult(btn) {
+    const wrapper = btn.closest('.ai-msg-wrapper');
+    const data = getResultData(wrapper);
+    if (!data) return;
     const textarea = document.getElementById('article-content');
     textarea.focus();
     const pos = window._continueCursorPos || textarea.selectionStart;
     textarea.setSelectionRange(pos, pos);
-    document.execCommand('insertText', false, '\n\n' + lastAIResult);
+    document.execCommand('insertText', false, '\n\n' + data.text);
     textarea.dispatchEvent(new Event('input'));
-    lastAIResult = null;
 }
 
 // ===== 金句提取 =====
@@ -1596,16 +1603,19 @@ async function aiUseTemplate() {
         msgs.forEach(m => { if (m.textContent === '处理中...') m.remove(); });
 
         if (result.text) {
-            lastAIResult = result.text;
-            lastAISelection = sel ? {start: selStart, end: selEnd} : null;
+            const selData = sel ? {start: selStart, end: selEnd} : null;
             const container = document.getElementById('ai-messages');
             const wrapper = document.createElement('div');
             wrapper.className = 'ai-msg-wrapper';
+            const rid = ++_aiResultId;
+            wrapper.dataset.resultId = rid;
+            _aiResultData.set(rid, { text: result.text, sel: selData });
+            const selLabel = selData ? '选中文字' : '全文';
             wrapper.innerHTML = `
                 <div class="ai-msg assistant">${esc(result.text)}</div>
                 <div class="ai-msg-actions">
-                    <button class="btn btn-sm btn-primary" onclick="replaceAIResult()">替换${lastAISelection ? '选中文字' : '全文'}</button>
-                    <button class="btn btn-sm" onclick="insertAIResult()">追加到文末</button>
+                    <button class="btn btn-sm btn-primary" onclick="replaceAIResult(this)">替换${selLabel}</button>
+                    <button class="btn btn-sm" onclick="insertAIResult(this)">追加到文末</button>
                 </div>
             `;
             container.appendChild(wrapper);
