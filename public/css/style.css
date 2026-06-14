@@ -1453,7 +1453,6 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
 .editor-container.three-col .preview-pane {
     flex: 4;
     min-width: 200px;
-    position: relative;
     overflow-y: auto;
 }
 
@@ -1462,35 +1461,20 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
     min-width: 220px;
 }
 
-/* 预览跟随滚动开关 */
-.sync-scroll-toggle {
-    position: absolute;
-    top: 6px;
-    right: 8px;
-    z-index: 10;
-    width: 26px;
-    height: 26px;
-    padding: 4px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--bg-card);
-    color: var(--accent);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    opacity: 0.5;
-    transition: opacity 0.15s, color 0.15s, border-color 0.15s;
-}
-.sync-scroll-toggle:hover {
-    opacity: 1;
-}
-.sync-scroll-toggle.off {
+/* 预览跟随滚动开关（工具栏内） */
+.sync-scroll-toggle-label {
+    font-size: 0.8rem;
     color: var(--text-muted);
-    opacity: 0.4;
+    cursor: pointer;
+    user-select: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    white-space: nowrap;
 }
-.sync-scroll-toggle.off:hover {
-    opacity: 0.7;
+.sync-scroll-toggle-label input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
 }
 
 /* Two-column mode (AI collapsed) */
@@ -1502,7 +1486,6 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
 .editor-container:not(.three-col) .preview-pane {
     flex: 1;
     min-width: 300px;
-    position: relative;
     overflow-y: auto;
 }
 
