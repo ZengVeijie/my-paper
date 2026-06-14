@@ -101,12 +101,19 @@
 <!-- 数据管理 -->
 <div class="admin-panel" id="settings-data" style="display:none">
     <section class="settings-section">
-        <h2>数据导出</h2>
-        <p class="section-desc">导出你的数据为 Markdown 或 ZIP 包</p>
+        <h2>文章导出</h2>
+        <p class="section-desc">导出你的文章为 Markdown 或 ZIP 包</p>
         <div class="export-actions">
             <a href="#" class="btn" onclick="exportAllData();return false">导出全部数据 (ZIP)</a>
-            <a href="/api/export/templates" class="btn">导出模板数据 (CSV)</a>
             <span class="field-hint" style="margin-left:8px;">文章列表中可多选批量导出</span>
+        </div>
+    </section>
+
+    <section class="settings-section">
+        <h2>模板导出</h2>
+        <p class="section-desc">导出你的 AI 自定义模板</p>
+        <div class="export-actions">
+            <a href="/api/export/templates" class="btn">导出模板数据 (CSV)</a>
         </div>
     </section>
 </div>
