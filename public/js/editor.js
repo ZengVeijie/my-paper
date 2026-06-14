@@ -920,11 +920,13 @@ async function aiAction(action) {
 function replaceAIResult() {
     if (!lastAIResult) return;
     const textarea = document.getElementById('article-content');
+    textarea.focus();
     if (lastAISelection) {
-        textarea.value = textarea.value.substring(0, lastAISelection.start) + lastAIResult + textarea.value.substring(lastAISelection.end);
+        textarea.setSelectionRange(lastAISelection.start, lastAISelection.end);
     } else {
-        textarea.value = lastAIResult;
+        textarea.select();
     }
+    document.execCommand('insertText', false, lastAIResult);
     textarea.dispatchEvent(new Event('input'));
     lastAIResult = null;
     lastAISelection = null;
@@ -933,7 +935,10 @@ function replaceAIResult() {
 function insertAIResult() {
     if (!lastAIResult) return;
     const textarea = document.getElementById('article-content');
-    textarea.value = textarea.value + '\n\n' + lastAIResult;
+    textarea.focus();
+    const end = textarea.value.length;
+    textarea.setSelectionRange(end, end);
+    document.execCommand('insertText', false, '\n\n' + lastAIResult);
     textarea.dispatchEvent(new Event('input'));
     lastAIResult = null;
     lastAISelection = null;
@@ -1359,8 +1364,10 @@ async function doContinue(direction) {
 function insertContinueResult() {
     if (!lastAIResult) return;
     const textarea = document.getElementById('article-content');
+    textarea.focus();
     const pos = window._continueCursorPos || textarea.selectionStart;
-    textarea.value = textarea.value.substring(0, pos) + '\n\n' + lastAIResult + textarea.value.substring(pos);
+    textarea.setSelectionRange(pos, pos);
+    document.execCommand('insertText', false, '\n\n' + lastAIResult);
     textarea.dispatchEvent(new Event('input'));
     lastAIResult = null;
 }
