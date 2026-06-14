@@ -58,13 +58,10 @@ function initMobileEditor() {
         if (tabName === 'preview') {
             const textarea = document.getElementById('article-content');
             const previewContent = document.getElementById('preview-content');
-            const previewEmpty = document.getElementById('preview-empty');
             if (textarea && previewContent && typeof marked !== 'undefined') {
                 if (textarea.value.trim()) {
-                    if (previewEmpty) previewEmpty.style.display = 'none';
                     previewContent.innerHTML = marked.parse(textarea.value);
                 } else {
-                    if (previewEmpty) previewEmpty.style.display = '';
                     previewContent.innerHTML = '';
                 }
             }
@@ -112,7 +109,6 @@ function initEditor() {
     const textarea = document.getElementById('article-content');
     const previewPane = document.getElementById('preview-pane');
     const previewContent = document.getElementById('preview-content');
-    const previewEmpty = document.getElementById('preview-empty');
 
     if (!textarea || !previewPane || !previewContent) return;
 
@@ -126,15 +122,13 @@ function initEditor() {
     function updatePreview() {
         const md = textarea.value;
         if (md.trim() && typeof marked !== 'undefined') {
-            if (previewEmpty) previewEmpty.style.display = 'none';
             // 连续3个以上换行 → 每多一个换行插一个独立 <br> 段落（\n\n 隔离，避免污染相邻块语法）
             let processed = md.replace(/\r?\n/g, '\n').replace(/\n{3,}/g, m => '\n\n' + '<br>'.repeat(m.length - 2) + '\n\n');
             previewContent.innerHTML = marked.parse(processed);
         } else if (md.trim()) {
-            if (previewEmpty) previewEmpty.style.display = 'none';
             previewContent.innerHTML = '<p style="color:var(--text-muted)">Markdown 渲染库加载中...</p>';
         } else {
-            if (previewEmpty) previewEmpty.style.display = '';
+            previewContent.innerHTML = '<div class="preview-empty" id="preview-empty"><svg class="preview-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg><span>书写左侧内容后将实时显示</span></div>';
         }
     }
 
