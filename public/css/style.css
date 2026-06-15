@@ -1475,6 +1475,7 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
 .sync-scroll-toggle-label input[type="checkbox"] {
     margin: 0;
     cursor: pointer;
+    accent-color: var(--accent);
 }
 
 /* Two-column mode (AI collapsed) */
