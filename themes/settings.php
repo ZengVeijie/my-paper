@@ -24,6 +24,15 @@
                 <span>显示名称</span>
                 <input type="text" name="display_name" value="<?= h($user['display_name'] ?? '') ?>">
             </label>
+            <div class="field">
+                <span>首页展示</span>
+                <div class="radio-group">
+                    <label class="radio-label"><input type="radio" name="homepage_mode" value="both" <?= ($user['homepage_mode'] ?? 'both') === 'both' ? 'checked' : '' ?>> 合辑 + 文章</label>
+                    <label class="radio-label"><input type="radio" name="homepage_mode" value="collections_only" <?= ($user['homepage_mode'] ?? '') === 'collections_only' ? 'checked' : '' ?>> 仅展示合辑</label>
+                    <label class="radio-label"><input type="radio" name="homepage_mode" value="articles_only" <?= ($user['homepage_mode'] ?? '') === 'articles_only' ? 'checked' : '' ?>> 仅展示文章</label>
+                </div>
+                <span class="field-hint">控制首页展示哪些内容，合辑始终在文章之前</span>
+            </div>
             <button type="submit" class="btn btn-primary">保存</button>
         </form>
     </section>

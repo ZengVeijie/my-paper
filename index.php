@@ -15,7 +15,13 @@ require_once __DIR__ . '/lib/ai.php';
 // Auto-detect subdirectory path from SCRIPT_NAME
 // e.g. /mypaper/index.php => BASE_PATH = /mypaper
 // e.g. /index.php => BASE_PATH = '' (root deployment)
-$script_dir = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
+// Note: PHP built-in server may set SCRIPT_NAME to the requested URI (not index.php)
+// when it can't find static files. We only derive BASE_PATH from .php scripts.
+$script_name = $_SERVER['SCRIPT_NAME'] ?? '/index.php';
+if (!preg_match('#\.php$#i', $script_name)) {
+    $script_name = '/index.php'; // fallback: treat as root deployment
+}
+$script_dir = rtrim(dirname($script_name), '/\\');
 define('BASE_PATH', $script_dir === '/' || $script_dir === '' ? '' : $script_dir);
 
 // Auto-detect site URL
@@ -35,6 +41,25 @@ $router = new Router();
 $router->get('/', function() {
     require_login();
     handle_list_articles();
+
+    $user = current_user();
+    $mode = $user['homepage_mode'] ?? 'both';
+
+    // 加载合辑数据（当模式不为 articles_only 时）
+    $collections = [];
+    if ($mode !== 'articles_only') {
+        $collections = json_list(DATA_DIR . '/collections');
+        // 仅展示自己的合辑 + 协作的合辑
+        $collections = array_filter($collections, function($c) use ($user) {
+            return ($c['user_id'] ?? '') === $user['id']
+                || in_array($user['id'], $c['collaborator_ids'] ?? []);
+        });
+        // 按创建时间倒序
+        usort($collections, fn($a, $b) => ($b['created_at'] ?? '') <=> ($a['created_at'] ?? ''));
+    }
+
+    $GLOBALS['page_data']['homepage_mode'] = $mode;
+    $GLOBALS['page_data']['collections'] = $collections;
     render_page('home');
 });
 
@@ -350,7 +375,7 @@ $uri = $_SERVER['REQUEST_URI'];
 // 静态文件
 if (preg_match('#\.(css|js|png|jpg|jpeg|gif|svg|ico|woff2?|ttf|pdf|md|zip|docx?|xlsx?|pptx?|txt|webp|bmp|mp4|mp3|wav|ogg|flac)$#i', $uri)) {
     $uriPath = parse_url($uri, PHP_URL_PATH);
-    if (defined('BASE_PATH') && BASE_PATH && strpos($uriPath, BASE_PATH) === 0) {
+    if (BASE_PATH && strpos($uriPath, BASE_PATH) === 0) {
         $uriPath = substr($uriPath, strlen(BASE_PATH));
     }
     $path = __DIR__ . $uriPath;

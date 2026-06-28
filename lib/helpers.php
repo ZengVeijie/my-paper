@@ -1,6 +1,6 @@
 <?php
 /**
- * My Paper - 通用工具函数
+ * 平静之心 - 通用工具函数
  */
 
 function uuid(): string {
@@ -50,6 +50,16 @@ function json_list(string $dir): array {
 
 function h(string $str): string {
     return htmlspecialchars($str, ENT_QUOTES, 'UTF-8');
+}
+
+function first_char(string $s): string {
+    if ($s === '') return '';
+    if (function_exists('mb_substr')) return mb_substr($s, 0, 1);
+    $byte = ord($s[0]);
+    if ($byte < 0x80) return $s[0];
+    if ($byte < 0xE0) return substr($s, 0, 2);
+    if ($byte < 0xF0) return substr($s, 0, 3);
+    return substr($s, 0, 4);
 }
 
 function u(string $path): string {

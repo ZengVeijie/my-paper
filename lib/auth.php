@@ -1,6 +1,6 @@
 <?php
 /**
- * My Paper - 认证与用户管理
+ * 平静之心 - 认证与用户管理
  */
 
 require_once __DIR__ . '/helpers.php';
@@ -268,6 +268,10 @@ function handle_update_profile(): void {
 
     if (isset($data['display_name'])) $user['display_name'] = trim($data['display_name']);
     if (isset($data['deepseek_api_key'])) $user['deepseek_api_key'] = trim($data['deepseek_api_key']);
+    if (isset($data['ai_max_tokens'])) $user['ai_max_tokens'] = (int)$data['ai_max_tokens'] ?: null;
+    if (isset($data['homepage_mode']) && in_array($data['homepage_mode'], ['both', 'articles_only', 'collections_only'])) {
+        $user['homepage_mode'] = $data['homepage_mode'];
+    }
     if (!empty($data['new_password'])) {
         if (!password_verify($data['current_password'] ?? '', $user['password_hash'])) {
             json_response(['error' => '当前密码不正确'], 403);
