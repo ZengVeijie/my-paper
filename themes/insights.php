@@ -1341,14 +1341,57 @@ function renderTimeline(data) {
     var tl = data.timeline || [];
     if (!tl.length) return '<p style="color:var(--text-muted);text-align:center;padding:40px;">暂无时间线数据</p>';
 
-    var html = '<div class="timeline">';
-    tl.forEach(function(monthGroup) {
+    // Detect format: grouped {month, events} vs flat {date, title, ...}
+    var grouped;
+    if (tl[0] && tl[0].events) {
+        // Format 1: already grouped by month
+        grouped = tl;
+    } else {
+        // Format 2: flat list — group by month ourselves
+        var monthMap = {};
+        var sentimentMap = {positive:'积极',negative:'消极',neutral:'中性',happy:'喜悦',sad:'忧伤',anxious:'焦虑',calm:'平静',excited:'兴奋',tired:'疲惫',grateful:'感激',angry:'愤怒'};
+        tl.forEach(function(ev) {
+            var d = ev.date || '';
+            var parts = d.split('-');
+            var mKey = parts[1] ? parseInt(parts[1]) + '月' : '';
+            if (!monthMap[mKey]) monthMap[mKey] = [];
+            monthMap[mKey].push({
+                date: (parts[1] ? parseInt(parts[1]) + '月' : '') + (parts[2] ? parseInt(parts[2]) + '日' : d),
+                title: ev.title || ev.name || '',
+                summary: ev.description || ev.summary || ev.content || '',
+                emotion: sentimentMap[ev.sentiment] || ev.sentiment || ev.emotion || ev.mood || '',
+                evidence: ev.evidence || '',
+                tags: ev.tags || []
+            });
+        });
+        // Convert to grouped format, sorted by month
+        grouped = Object.keys(monthMap).sort(function(a,b) {
+            return parseInt(a) - parseInt(b);
+        }).map(function(m) {
+            return {month: m, events: monthMap[m]};
+        });
+    }
+
+    // Render summary at top if present
+    var summaryHtml = '';
+    if (data.summary) {
+        summaryHtml = '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:20px;font-size:0.9rem;line-height:1.8;">' + esc(data.summary) + '</div>';
+    }
+
+    var html = summaryHtml + '<div class="timeline">';
+    grouped.forEach(function(monthGroup) {
         var month = monthGroup.month || '';
         html += '<div class="timeline-month">' + esc(month) + '</div>';
         var events = monthGroup.events || [];
         events.forEach(function(ev) {
             var emotion = ev.emotion || ev.mood || '';
             var emotionCls = emotion ? ' emotion-' + emotion : '';
+            var tagsHtml = '';
+            if (ev.tags && ev.tags.length) {
+                tagsHtml = '<div style="margin-top:4px;">' + ev.tags.map(function(t) {
+                    return '<span style="display:inline-block;padding:1px 8px;margin:2px 4px 0 0;border-radius:8px;font-size:0.68rem;font-family:var(--font-ui);background:var(--bg);color:var(--text-muted);border:1px solid var(--border-light);">' + esc(t) + '</span>';
+                }).join('') + '</div>';
+            }
             html += '<div class="timeline-event">' +
                 '<div class="timeline-event-date">' + esc(ev.date || '') +
                     (emotion ? '<span class="timeline-emotion' + emotionCls + '">' + esc(emotion) + '</span>' : '') +
@@ -1356,6 +1399,7 @@ function renderTimeline(data) {
                 '<div class="timeline-event-title">' + esc(ev.title || ev.name || '') + '</div>' +
                 '<div class="timeline-event-summary">' + esc(ev.summary || ev.description || ev.content || '') + '</div>' +
                 (ev.evidence ? '<div class="timeline-event-evidence">' + esc(ev.evidence) + '</div>' : '') +
+                tagsHtml +
             '</div>';
         });
     });
