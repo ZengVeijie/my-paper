@@ -36,6 +36,7 @@
 │   ├── articles.php          # 文章 CRUD + 留言
 │   ├── backup.php            # 数据备份/导出 + 分享 + 合辑 PDF
 │   ├── ai.php                # DeepSeek API 封装（AI 后台）
+│   ├── insights_apps.php     # 洞见应用注册中心 & 工具函数
 │   ├── auth.php              # 认证与用户管理
 │   ├── notifications.php     # 通知系统
 │   ├── router.php            # 路由类
@@ -54,6 +55,7 @@
 │   ├── comments/             # 留言 JSON 文件
 │   ├── invites/              # 邀请码 JSON 文件
 │   ├── shares/               # 分享链接 JSON
+│   ├── insights_apps/        # 自定义/AI 生成洞见应用 JSON
 │   ├── config.json           # 站点可写配置
 │   └── uploads/              # 上传文件存储
 ├── themes/                   # 渲染模板
@@ -93,7 +95,7 @@
 - [x] **合辑展示**：首页顶部以卡片网格展示用户的合辑（自己创建 + 协作的），每张卡片显示封面、名称、描述摘要、文章数
 - [x] **文章列表**：仅展示当前登录用户自己的文章，按时间倒序排列
 - [x] **列表项信息**：标题、日期、摘要（前 200 字符）、标签、所属合辑、可见性标识
-- [x] **搜索**：全文搜索（按标题和内容关键字），搜索框位于页面标题下方、合辑区上方（仅文章展示模式时显示）
+- [x] **搜索**：全文搜索（按标题、内容、标签关键字），合辑（按名称、描述），搜索框始终可见
 - [ ] **筛选**：按合辑、标签、可见性状态筛选
 - [x] **分页**：分页链接
 - [ ] **置顶功能**：支持将重要文章置顶，置顶文章带视觉标识
@@ -213,7 +215,37 @@
 - [ ] **ZIP 打包结构**：按合辑分文件夹，未归类文章在根目录，图片路径自动调整为相对路径
 - [ ] **导出文件命名**：`My Paper_export_{日期}.zip` 或 `{合辑名}.pdf`
 
-### 3.10 响应式适配
+### 3.10 待办清单系统
+- [x] **编辑器清单按钮**：工具栏 `☑` 按钮，选中多行可批量转换为 `- [ ] ` 格式
+- [x] **文章页核销交互**：仅文章作者可点击 checkbox 切换完成/未完成状态
+  - 完成时自动追加 `(完成于 YYYY-MM-DD HH:mm)` 时间戳
+  - 取消完成时移除时间戳
+  - 行级精确匹配，通过 `/api/articles/{id}/toggle-task` API 更新
+  - 非作者看到的 checkbox 为 disabled 状态
+- [x] **文章卡片进度**：首页文章卡片显示任务进度条（n/m 任务 + 进度条），全部完成时显示"全部完成"
+- [x] **待办纵览面板**：洞见页面内置应用，汇总所有文章中的待办事项，按文章分组显示，标注完成状态和日期
+
+### 3.11 洞见应用系统
+- [x] **动态应用架构**：洞见页面从 4 个硬编码 tab 重构为可扩展的应用面板系统
+- [x] **内置应用**（8 个）：
+  - 情感分析 — AI/手动标记文章情感基调，筛选和统计
+  - 相关回顾 — 选择文章，AI 查找历史中主题相关的内容
+  - 周月总结 — 选择时间范围，AI 生成回顾总结
+  - 写作统计 — 总览/时段/月度/情感/标签等统计图表 + AI 洞察
+  - 待办纵览 — 汇总所有文章待办事项
+  - MBTI 分析 — AI 从四维度分析日记推断人格类型，引用证据
+  - CBT 疗法 — AI 识别认知扭曲，给出 CBT 干预建议
+  - 盲区探索 — AI 发现 3 个用户未意识的隐藏真相
+- [x] **应用仓库**（设置页新增"App 仓库"标签）：
+  - 启用/禁用应用（控制洞见页展示）
+  - 拖拽排序（上下移动调整洞见页 tab 顺序）
+  - 两级删除逻辑：
+    - "从洞见移除"：从用户启用列表中移除，应用仍在仓库
+    - "从仓库删除"：永久删除应用 JSON + 清理所有用户启用状态（仅自定义/AI 应用可删，内置应用不可删）
+- [x] **AI 生成应用**：用户描述需求 → DeepSeek 生成完整应用定义（名称/描述/HTML+JS 模板）→ 存入仓库 → 可添加到洞见页
+- [x] **渲染模式**：内置应用使用 PHP 模板（`render_type: php`），AI 应用使用存储的 HTML/JS 模板（`render_type: js`）
+
+### 3.12 响应式适配
 - [x] **桌面端（≥768px）**：
   - 左侧固定导航栏：首页 → 写文章 → 合辑 → 洞见 → 站内 → 收藏 → 用户管理（仅管理员）
   - 侧边栏底部显示用户名（可点击跳转设置页）和退出链接
@@ -328,6 +360,22 @@
 | POST | `/api/ai/search` | AI 语义搜索文章（body: {query}） |
 | POST | `/api/ai/query-articles` | AI 多篇文章问答（body: {article_ids, question}） |
 
+### 5.8 待办清单
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/articles/{id}/toggle-task` | 切换单行清单状态（仅作者），body: {line_index, checked} |
+
+### 5.9 洞见应用系统
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/insights/apps` | 获取所有可用应用（内置 + 自定义/AI） |
+| PUT | `/api/insights/apps/reorder` | 更新用户启用的应用列表和排序，body: {ids: [...]} |
+| POST | `/api/insights/apps/generate` | AI 生成新应用，body: {description}，返回完整应用定义 |
+| DELETE | `/api/insights/apps/{id}` | 从仓库永久删除应用（仅自定义/AI），同时清理所有用户引用 |
+| POST | `/api/insights/mbti` | MBTI 人格分析，body: {scope}，返回 {type, reasoning, confidence} |
+| POST | `/api/insights/cbt` | CBT 认知行为疗法分析，body: {scope}，返回 {distortions, summary} |
+| POST | `/api/insights/blindspot` | 盲区探索，body: {scope}，返回 {blindspots, summary} |
+
 ---
 
 ## 6. 数据模型（JSON 结构）
@@ -342,6 +390,11 @@
   "role": "admin",
   "enabled": true,
   "deepseek_api_key": "",
+  "ai_max_tokens": 2048,
+  "insights_apps": ["sentiment", "related", "summary", "stats"],
+  "ai_templates": [],
+  "favorite_article_ids": [],
+  "homepage_mode": "both",
   "unread_notifications": 0,
   "created_at": "2026-06-09T12:00:00+08:00"
 }
@@ -432,7 +485,26 @@
 }
 ```
 
-### 6.8 通知 (data/notifications/{user_id}.json)
+### 6.8 洞见应用 (data/insights_apps/{id}.json)
+```json
+{
+  "id": "uuid",
+  "name": "应用名称",
+  "description": "功能说明",
+  "icon": "🧠",
+  "source": "ai",
+  "render_type": "js",
+  "template": "<div id='app-xxx'>...</div><script>...</script>",
+  "api_spec": null,
+  "user_id": "creator-uuid",
+  "created_at": "2026-06-28T12:00:00+08:00"
+}
+```
+**source 取值**：`builtin`（内置，不可删除）、`ai`（AI 生成）
+
+**render_type 取值**：`php`（PHP 模板渲染）、`js`（存储的 HTML/JS 模板）
+
+### 6.9 通知 (data/notifications/{user_id}.json)
 ```json
 {
   "user_id": "user-uuid",
@@ -507,6 +579,11 @@
 - [x] 侧边栏用户名改为可点击链接，跳转设置页
 - [x] 首页搜索框上移至标题与合辑区之间
 - [x] 删除站内页和收藏页的栏目说明文字
+- [x] 首页搜索同时匹配文章和合辑（名称 + 描述）
+- [x] 文章待办清单系统（编辑器插入/文章页核销/卡片进度/洞见纵览）
+- [x] 洞见应用系统重构（8 个内置应用 + 动态面板 + AI 生成应用）
+- [x] 设置页 App 仓库（启用/禁用/排序/删除/AI 生成）
+- [x] MBTI 分析 / CBT 疗法 / 盲区探索 三个 AI 应用
 - [ ] 性能优化
 - [ ] UI 打磨
 
@@ -538,3 +615,8 @@
 | AI 多篇问答 | 首页/合辑勾选多篇文章后点击"AI 提问"，弹出新窗口展示回答 |
 | 文件下载 | 图片/视频/音频/字体在内联预览，其余格式 (PDF/Office/ZIP/MD) 触发下载 |
 | 合辑封面 | 支持本地上传或 URL 输入，封面在详情页展示 |
+| 清单核销 | 仅文章作者可切换 checkbox，行级精确匹配原始 Markdown，完成时自动附时间戳 |
+| 洞见应用架构 | 动态面板系统，内置应用使用 PHP 模板渲染，AI 应用使用存储的 HTML/JS 模板 |
+| 应用仓库 | 两级删除逻辑：从洞见移除（软删除，仅改用户偏好）vs 从仓库删除（硬删除，不可恢复） |
+| AI 应用生成 | 用户描述需求 → DeepSeek 生成完整应用定义 → 存入仓库 → 可添加到洞见页 |
+| 应用排序 | 用户 `insights_apps` 有序数组控制洞见页 tab 顺序，API 整体覆盖更新 |
