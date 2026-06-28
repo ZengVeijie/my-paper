@@ -111,6 +111,7 @@ h3 { font-size: 1.15rem; }
 }
 
 .user-name { color: var(--text); font-weight: 500; }
+.user-name:hover { color: var(--accent); }
 .logout-link { color: var(--text-muted); font-size: 0.8rem; }
 .logout-link:hover { color: var(--danger); }
 
@@ -1092,6 +1093,7 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
 
 @media (min-width: 769px) {
     .sidebar { transform: translateX(0) !important; }
+    .page-header h1 { display: none; }
 }
 
 /* ===== 通知 ===== */
@@ -1350,6 +1352,31 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
 }
 
 .ai-actions .btn-sm { font-size: 0.75rem; padding: 4px 8px; }
+
+/* AI 分区卡片 */
+.ai-section {
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+    padding: 6px 8px;
+    background: var(--bg);
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.ai-section-label {
+    font-family: var(--font-ui);
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.ai-section-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+}
+.ai-section-btns .btn-sm { font-size: 0.72rem; padding: 3px 7px; }
 
 .ai-actions-label {
     font-family: var(--font-ui);

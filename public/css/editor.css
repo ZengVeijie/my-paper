@@ -1,4 +1,4 @@
-/* ===== My Paper - 编辑器样式 ===== */
+/* ===== 平静之心 - 编辑器样式 ===== */
 
 .editor-page { max-width: 100%; }
 
@@ -105,7 +105,7 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     overflow: hidden;
-    min-height: 400px;
+    min-height: 0;
     flex: 1;
 }
 
@@ -220,6 +220,10 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--bg-card);
+}
+
+.editor-container.three-col .ai-panel {
+    margin-top: 0;
 }
 
 .ai-panel-header {

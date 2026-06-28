@@ -5,6 +5,7 @@
 
 <div class="admin-tabs">
     <button class="tab-btn active" onclick="switchSettingsTab('profile', event)">个人设置</button>
+    <button class="tab-btn" onclick="switchSettingsTab('pages', event)">页面设置</button>
     <button class="tab-btn" onclick="switchSettingsTab('assistant', event)">助手管理</button>
     <button class="tab-btn" onclick="switchSettingsTab('data', event)">数据管理</button>
     <button class="tab-btn" onclick="switchSettingsTab('shares', event)">分享管理</button>
@@ -24,15 +25,6 @@
                 <span>显示名称</span>
                 <input type="text" name="display_name" value="<?= h($user['display_name'] ?? '') ?>">
             </label>
-            <div class="field">
-                <span>首页展示</span>
-                <div class="radio-group">
-                    <label class="radio-label"><input type="radio" name="homepage_mode" value="both" <?= ($user['homepage_mode'] ?? 'both') === 'both' ? 'checked' : '' ?>> 合辑 + 文章</label>
-                    <label class="radio-label"><input type="radio" name="homepage_mode" value="collections_only" <?= ($user['homepage_mode'] ?? '') === 'collections_only' ? 'checked' : '' ?>> 仅展示合辑</label>
-                    <label class="radio-label"><input type="radio" name="homepage_mode" value="articles_only" <?= ($user['homepage_mode'] ?? '') === 'articles_only' ? 'checked' : '' ?>> 仅展示文章</label>
-                </div>
-                <span class="field-hint">控制首页展示哪些内容，合辑始终在文章之前</span>
-            </div>
             <button type="submit" class="btn btn-primary">保存</button>
         </form>
     </section>
@@ -52,6 +44,24 @@
         </form>
     </section>
 
+</div>
+
+<!-- 页面设置 -->
+<div class="admin-panel" id="settings-pages" style="display:none">
+    <section class="settings-section">
+        <h2>首页展示</h2>
+        <p class="section-desc">控制首页展示哪些内容，合辑始终在文章之前</p>
+        <form id="pages-form" onsubmit="updatePages(event)">
+            <div class="field">
+                <div class="radio-group">
+                    <label class="radio-label"><input type="radio" name="homepage_mode" value="both" <?= ($user['homepage_mode'] ?? 'both') === 'both' ? 'checked' : '' ?>> 合辑 + 文章</label>
+                    <label class="radio-label"><input type="radio" name="homepage_mode" value="collections_only" <?= ($user['homepage_mode'] ?? '') === 'collections_only' ? 'checked' : '' ?>> 仅展示合辑</label>
+                    <label class="radio-label"><input type="radio" name="homepage_mode" value="articles_only" <?= ($user['homepage_mode'] ?? '') === 'articles_only' ? 'checked' : '' ?>> 仅展示文章</label>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary">保存</button>
+        </form>
+    </section>
 </div>
 
 <!-- 助手管理 -->
@@ -147,6 +157,10 @@ function switchSettingsTab(name, ev) {
     ev.target.classList.add('active');
     if (name === 'shares' && !sharesLoaded) { sharesLoaded = true; loadShares(); }
     if (name === 'assistant' && !templatesLoaded) { templatesLoaded = true; loadTemplates(); }
+}
+async function updatePages(e) {
+    // Reuse updateProfile which sends to /api/auth/profile
+    await updateProfile(e);
 }
 async function loadShares() {
     try {

@@ -16,6 +16,17 @@ $show_articles = in_array($homepage_mode, ['both', 'articles_only']);
     </div>
 </div>
 
+<?php if ($show_articles): ?>
+<div class="search-bar">
+    <form method="GET" action="/" class="search-form">
+        <input type="search" name="search" value="<?= h($search) ?>" placeholder="搜索文章..." class="search-input">
+        <?php if ($search): ?>
+            <a href="/" class="search-clear">清除</a>
+        <?php endif; ?>
+    </form>
+</div>
+<?php endif; ?>
+
 <?php if ($show_collections): ?>
 <section class="home-section">
     <div class="home-section-header">
@@ -58,15 +69,6 @@ $show_articles = in_array($homepage_mode, ['both', 'articles_only']);
 <section class="home-section">
     <div class="home-section-header">
         <h2>文章 <span class="section-count"><?= $total ?></span></h2>
-    </div>
-
-    <div class="search-bar">
-        <form method="GET" action="/" class="search-form">
-            <input type="search" name="search" value="<?= h($search) ?>" placeholder="搜索文章..." class="search-input">
-            <?php if ($search): ?>
-                <a href="/" class="search-clear">清除</a>
-            <?php endif; ?>
-        </form>
     </div>
 
     <?php if (empty($articles)): ?>

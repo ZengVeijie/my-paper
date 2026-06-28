@@ -107,19 +107,31 @@ $article_id = $article['id'] ?? '';
                     <span class="ref-label">当前操作：全文</span>
                 </div>
                 <div class="ai-actions">
-                    <span class="ai-actions-label">修改</span>
-                    <button class="btn btn-sm" onclick="aiAction('polish')" title="润色文字，使表达更流畅">润色</button>
-                    <button class="btn btn-sm" onclick="aiAction('translate')" title="翻译为英语">翻译</button>
-                    <button class="btn btn-sm" onclick="aiAction('style')" title="切换写作风格">风格</button>
-                    <button class="btn btn-sm" onclick="aiAction('format')" title="将纯文本转换为结构化 Markdown">格式化</button>
-                    <span class="ai-actions-sep"></span>
-                    <span class="ai-actions-label">理解 & 辅助</span>
-                    <button class="btn btn-sm" onclick="aiAction('explain')" title="解释选中的专有名词和术语">解释</button>
-                    <button class="btn btn-sm" onclick="aiAction('summary')" title="生成文章摘要">摘要</button>
-                    <button class="btn btn-sm" onclick="aiHighlights()" title="提取文章金句">金句</button>
-                    <button class="btn btn-sm" onclick="aiContinue()" title="从光标处续写下一段">续写</button>
-                    <button class="btn btn-sm" onclick="aiSuggestTitle()" title="AI 推荐标题">标题</button>
-                    <button class="btn btn-sm" onclick="aiSuggestTags()" title="AI 推荐标签">标签</button>
+                    <div class="ai-section">
+                        <div class="ai-section-label">修改</div>
+                        <div class="ai-section-btns">
+                            <button class="btn btn-sm" onclick="aiAction('polish')" title="润色文字，使表达更流畅">润色</button>
+                            <button class="btn btn-sm" onclick="aiAction('translate')" title="翻译为英语">翻译</button>
+                            <button class="btn btn-sm" onclick="aiAction('style')" title="切换写作风格">风格</button>
+                            <button class="btn btn-sm" onclick="aiAction('format')" title="将纯文本转换为结构化 Markdown">格式化</button>
+                        </div>
+                    </div>
+                    <div class="ai-section">
+                        <div class="ai-section-label">理解</div>
+                        <div class="ai-section-btns">
+                            <button class="btn btn-sm" onclick="aiAction('explain')" title="解释选中的专有名词和术语">解释</button>
+                            <button class="btn btn-sm" onclick="aiAction('summary')" title="生成文章摘要">摘要</button>
+                            <button class="btn btn-sm" onclick="aiHighlights()" title="提取文章金句">金句</button>
+                        </div>
+                    </div>
+                    <div class="ai-section">
+                        <div class="ai-section-label">辅助</div>
+                        <div class="ai-section-btns">
+                            <button class="btn btn-sm" onclick="aiContinue()" title="从光标处续写下一段">续写</button>
+                            <button class="btn btn-sm" onclick="aiSuggestTitle()" title="AI 推荐标题">标题</button>
+                            <button class="btn btn-sm" onclick="aiSuggestTags()" title="AI 推荐标签">标签</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="ai-templates" id="ai-templates" style="display:none;padding:0 0 4px;margin-bottom:4px;position:relative;">
                     <input type="text" id="ai-template-input" placeholder="搜索模板..." autocomplete="off" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-ui);font-size:0.78rem;background:var(--bg-card);max-width:140px;">

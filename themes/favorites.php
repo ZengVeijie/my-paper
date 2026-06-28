@@ -6,7 +6,6 @@ $total = $total ?? 0;
 ?>
 <div class="page-header">
     <h1>收藏</h1>
-    <p style="color:var(--text-muted);font-family:var(--font-ui);font-size:0.85rem;margin-top:4px;">你收藏的站内文章</p>
 </div>
 
 <?php if (empty($articles)): ?>

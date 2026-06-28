@@ -7,7 +7,6 @@ $total = $total ?? 0;
 ?>
 <div class="page-header">
     <h1>站内</h1>
-    <p style="color:var(--text-muted);font-family:var(--font-ui);font-size:0.85rem;margin-top:4px;">所有用户设为站内可见的文章</p>
 </div>
 
 <div class="search-bar">
