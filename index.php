@@ -452,7 +452,7 @@ $router->post('/api/insights/apps/generate', function() {
     if (empty($description)) json_response(['error' => '请描述你想要的应用功能'], 400);
 
     $result = call_deepseek(
-        "你是一个应用分析专家。用户描述了一个洞见分析需求，你需要生成应用元数据和给 AI 的分析提示词。\n\n你的任务不是写前端代码，而是编写高质量的 AI 分析提示词（analysis_prompt），它将被传给 DeepSeek 分析用户的日记内容。\n\n返回严格的 JSON：\n{\n  \"name\": \"应用名称（2-6字）\",\n  \"description\": \"20-50字的功能说明\",\n  \"analysis_prompt\": \"给 DeepSeek 的系统提示词，要求：\\n    - 明确分析视角和方法\\n    - 指定输出 JSON 结构（字段名用英文，内容用中文）\\n    - 引用原文证据\\n    - 温和、有洞察力的语气\\n    - 末尾加上「只输出JSON，不要其他文字」\",\n  \"result_layout\": \"cards|list|mixed\"\n}\n\nresult_layout 说明：\n- cards: 结果是多项并列的数组（如多个发现、多条建议）\n- list: 结果是简单列表\n- mixed: 结果包含一个主体总结 + 可选的子项数组（如盲区分析、CBT分析）\n\n只输出 JSON，不要其他文字。",
+        "你是一个应用分析专家。用户描述了一个洞见分析需求，你需要生成应用元数据和给 AI 的分析提示词。\n\n你的任务不是写前端代码，而是编写高质量的 AI 分析提示词（analysis_prompt），它将被传给 DeepSeek 分析用户的日记内容。\n\n返回严格的 JSON：\n{\n  \"name\": \"应用名称（2-6字）\",\n  \"description\": \"20-50字的功能说明\",\n  \"analysis_prompt\": \"给 DeepSeek 的系统提示词，要求：\\n    - 明确分析视角和方法\\n    - 指定输出 JSON 结构（字段名用英文，内容用中文）\\n    - 引用原文证据\\n    - 温和、有洞察力的语气\\n    - 末尾加上「只输出JSON，不要其他文字」\",\n  \"result_layout\": \"cards|list|mixed|timeline\"\n}\n\nresult_layout 说明：\n- cards: 结果是多项并列的数组（如多个发现、多条建议）\n- list: 结果是简单列表\n- mixed: 结果包含一个主体总结 + 可选的子项数组（如盲区分析、CBT分析）\n- timeline: 结果是按时间排列的事件时间线（如年度回顾），输出需包含 timeline 数组\n\n只输出 JSON，不要其他文字。",
         $description,
         0.7,
         2048
@@ -549,7 +549,7 @@ $router->post('/api/insights/mbti', function() {
     $catalog = build_article_catalog($articles, 400);
 
     $result = call_deepseek(
-        '你是一个MBTI心理分析专家。基于用户提供的日记内容，推断用户的MBTI人格类型（如INFJ、ENTP等），给出详细推理。从E/I、S/N、T/F、J/P四个维度分析，引用日记中的具体例证。返回严格的JSON：{"type":"INFJ","reasoning":"详细推理（含日记例证）...","confidence":"高/中/低"}。只输出JSON。',
+        '你是一个MBTI心理分析专家。基于用户提供的日记内容，推断用户的MBTI人格类型（如INFJ、ENTP等），给出详细推理。从E/I、S/N、T/F、J/P四个维度分析，引用日记中的具体例证。\n\n每个维度给出0-1之间的分数，表示倾向第二个字母的程度。例如E/I=0.2表示明显偏E，E/I=0.8表示明显偏I，0.5表示平衡。\n\n返回严格的JSON：{"type":"INFJ","dimensions":[{"axis":"E/I","score":0.3,"label":"I"},{"axis":"S/N","score":0.85,"label":"N"},{"axis":"T/F","score":0.7,"label":"F"},{"axis":"J/P","score":0.75,"label":"J"}],"reasoning":"详细推理（含日记例证）...","confidence":"高/中/低"}。只输出JSON。',
         "请分析以下日记：\n\n{$catalog}",
         0.7,
         2048

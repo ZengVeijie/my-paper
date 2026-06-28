@@ -402,6 +402,110 @@ foreach ($collections as $c) {
     font-size:0.85rem;
     line-height:1.8;
 }
+
+/* Timeline */
+.timeline { position:relative; padding-left:32px; }
+.timeline::before {
+    content:'';
+    position:absolute;
+    left:12px; top:0; bottom:0;
+    width:2px;
+    background:var(--border);
+}
+.timeline-month {
+    position:relative;
+    margin:24px 0 16px;
+    font-size:1rem;
+    font-weight:700;
+    color:var(--accent);
+    font-family:var(--font-ui);
+}
+.timeline-month::before {
+    content:'';
+    position:absolute;
+    left:-22px; top:50%;
+    width:10px; height:10px;
+    border-radius:50%;
+    background:var(--accent);
+    border:2px solid var(--bg);
+    transform:translateY(-50%);
+}
+.timeline-event {
+    position:relative;
+    padding:12px 16px;
+    margin-bottom:12px;
+    background:var(--bg-card);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+}
+.timeline-event::before {
+    content:'';
+    position:absolute;
+    left:-24px; top:18px;
+    width:6px; height:6px;
+    border-radius:50%;
+    background:var(--text-muted);
+}
+.timeline-event-date {
+    font-size:0.75rem;
+    color:var(--text-muted);
+    font-family:var(--font-ui);
+    margin-bottom:4px;
+}
+.timeline-event-title {
+    font-weight:600;
+    font-size:0.9rem;
+    margin-bottom:4px;
+}
+.timeline-event-summary {
+    font-size:0.82rem;
+    color:var(--text-secondary);
+    line-height:1.6;
+}
+.timeline-event-evidence {
+    margin-top:6px;
+    font-size:0.78rem;
+    color:var(--text-muted);
+    font-style:italic;
+    padding-left:8px;
+    border-left:2px solid var(--border);
+}
+.timeline-emotion {
+    display:inline-block;
+    padding:1px 8px;
+    border-radius:8px;
+    font-size:0.7rem;
+    font-family:var(--font-ui);
+    margin-left:6px;
+    vertical-align:middle;
+}
+.emotion-积极, .emotion-喜悦, .emotion-兴奋 { background:#e8f5e9; color:#2a6c2e; }
+.emotion-低落, .emotion-忧伤, .emotion-疲惫 { background:#e8f0fe; color:#3a5a8c; }
+.emotion-焦虑, .emotion-愤怒 { background:#fde8e8; color:#8c1c1c; }
+.emotion-平静, .emotion-中性 { background:#f0f0f0; color:#555; }
+.emotion-感激 { background:#fff8e1; color:#6c5a14; }
+
+/* Bar chart (pure CSS) */
+.viz-bar-chart { display:flex; align-items:flex-end; gap:4px; height:160px; padding:0 4px; }
+.viz-bar-col { flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end; }
+.viz-bar-fill {
+    width:100%; max-width:48px;
+    border-radius:4px 4px 0 0;
+    background:var(--accent);
+    transition: height 0.5s ease;
+    min-height:2px;
+}
+.viz-bar-label { font-size:0.65rem; color:var(--text-muted); margin-top:4px; font-family:var(--font-ui); text-align:center; }
+.viz-bar-value { font-size:0.65rem; color:var(--text); font-family:var(--font-ui); margin-bottom:2px; }
+
+/* Donut chart (SVG) */
+.viz-donut-wrap { display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+.viz-donut-legend { font-size:0.78rem; font-family:var(--font-ui); }
+.viz-donut-legend-item { display:flex; align-items:center; gap:6px; margin:4px 0; }
+.viz-donut-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+
+/* Radar chart */
+.viz-radar-wrap { display:flex; justify-content:center; padding:16px 0; }
 </style>
 
 <script>
@@ -869,14 +973,20 @@ async function analyzeMBTI() {
         if (r.error) { resultEl.innerHTML = '<p style="color:var(--danger);">' + esc(r.error) + '</p>'; return; }
         if (!r.type) { resultEl.innerHTML = '<p style="color:var(--danger);">分析结果不完整，请稍后重试</p>'; return; }
 
-        // Parse type into dimensions
         var type = r.type;
-        var dims = {
-            'E/I': type.indexOf('E') !== -1 ? 'E' : 'I',
-            'S/N': type.indexOf('S') !== -1 ? 'S' : 'N',
-            'T/F': type.indexOf('T') !== -1 ? 'T' : 'F',
-            'J/P': type.indexOf('J') !== -1 ? 'J' : 'P'
-        };
+        var dims = r.dimensions || [];
+        // Build dims from type if API didn't return them
+        if (!dims.length) {
+            dims = [
+                {axis: 'E/I', score: type.indexOf('E') !== -1 ? 0.35 : 0.65, label: type.indexOf('E') !== -1 ? 'E' : 'I'},
+                {axis: 'S/N', score: type.indexOf('S') !== -1 ? 0.35 : 0.65, label: type.indexOf('S') !== -1 ? 'S' : 'N'},
+                {axis: 'T/F', score: type.indexOf('T') !== -1 ? 0.35 : 0.65, label: type.indexOf('T') !== -1 ? 'T' : 'F'},
+                {axis: 'J/P', score: type.indexOf('J') !== -1 ? 0.35 : 0.65, label: type.indexOf('J') !== -1 ? 'J' : 'P'}
+            ];
+        }
+
+        var radarScores = dims.map(function(d) { return d.score; });
+        var radarLabels = dims.map(function(d) { return d.axis; });
 
         resultEl.innerHTML =
             '<div class="summary-card">' +
@@ -884,14 +994,14 @@ async function analyzeMBTI() {
                     '<div class="mbti-type-badge">' + esc(type) + '</div>' +
                     '<div style="margin-bottom:16px;font-size:0.85rem;color:var(--text-muted);">置信度：' + esc(r.confidence || '中') + '</div>' +
                 '</div>' +
-                '<h3>维度分析</h3>' +
-                Object.entries(dims).map(function(e) {
-                    var dim = e[0], letter = e[1];
-                    var pct = letter === dim.split('/')[0] ? 65 : 35;
+                renderRadarChart(radarScores, radarLabels, 'MBTI 维度分布') +
+                '<h3>维度详情</h3>' +
+                dims.map(function(d) {
+                    var pct = Math.round(d.score * 100);
                     return '<div class="mbti-dim-row">' +
-                        '<span class="dim-label">' + dim + '</span>' +
+                        '<span class="dim-label">' + esc(d.axis) + '</span>' +
                         '<div class="dim-bar"><div class="dim-fill" style="width:' + pct + '%;"></div></div>' +
-                        '<span class="dim-pct">' + letter + ' ' + pct + '%</span>' +
+                        '<span class="dim-pct">' + esc(d.label) + ' ' + pct + '%</span>' +
                     '</div>';
                 }).join('') +
                 '<h3 style="margin-top:20px;">详细推理</h3>' +
@@ -1009,6 +1119,11 @@ function renderAIResult(containerId, data, layout) {
         el.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:40px;">暂无结果</p>';
         return;
     }
+    // Auto-detect timeline structure
+    if (data.timeline || layout === 'timeline') {
+        el.innerHTML = '<div class="ai-result-wrapper">' + renderTimeline(data) + '</div>';
+        return;
+    }
     var html = '<div class="ai-result-wrapper">';
     if (layout === 'cards' && Array.isArray(data)) {
         html += data.map(function(item, i) { return renderResultCard(item, i); }).join('');
@@ -1067,6 +1182,16 @@ function renderResultMixed(data) {
         html += '<div style="line-height:1.9;font-size:0.92rem;white-space:pre-wrap;margin-bottom:20px;">' + esc(primary) + '</div>';
     }
 
+    // Render bar chart if chart_data present
+    if (data.chart_data && data.chart_data.type === 'bar') {
+        html += renderBarChart(data.chart_data);
+    }
+
+    // Render donut chart if pie_data present
+    if (data.chart_data && data.chart_data.type === 'donut') {
+        html += renderDonutChart(data.chart_data);
+    }
+
     var items = data.distortions || data.blindspots || data.events || data.items || data.results || data.dimensions || [];
     if (Array.isArray(items) && items.length) {
         html += '<div>' + items.map(function(item, i) { return renderResultCard(item, i); }).join('') + '</div>';
@@ -1079,6 +1204,145 @@ function renderResultMixed(data) {
     }
 
     html += '</div>';
+    return html;
+}
+
+// ===== Visualization: Timeline =====
+function renderTimeline(data) {
+    var tl = data.timeline || [];
+    if (!tl.length) return '<p style="color:var(--text-muted);text-align:center;padding:40px;">暂无时间线数据</p>';
+
+    var html = '<div class="timeline">';
+    tl.forEach(function(monthGroup) {
+        var month = monthGroup.month || '';
+        html += '<div class="timeline-month">' + esc(month) + '</div>';
+        var events = monthGroup.events || [];
+        events.forEach(function(ev) {
+            var emotion = ev.emotion || ev.mood || '';
+            var emotionCls = emotion ? ' emotion-' + emotion : '';
+            html += '<div class="timeline-event">' +
+                '<div class="timeline-event-date">' + esc(ev.date || '') +
+                    (emotion ? '<span class="timeline-emotion' + emotionCls + '">' + esc(emotion) + '</span>' : '') +
+                '</div>' +
+                '<div class="timeline-event-title">' + esc(ev.title || ev.name || '') + '</div>' +
+                '<div class="timeline-event-summary">' + esc(ev.summary || ev.description || ev.content || '') + '</div>' +
+                (ev.evidence ? '<div class="timeline-event-evidence">' + esc(ev.evidence) + '</div>' : '') +
+            '</div>';
+        });
+    });
+    html += '</div>';
+    return html;
+}
+
+// ===== Visualization: Bar Chart =====
+function renderBarChart(cd) {
+    var labels = cd.labels || [];
+    var values = cd.values || [];
+    var maxVal = Math.max.apply(null, values) || 1;
+    var colors = ['#5b7b6f','#6b7d8e','#8b7355','#7b6b8e','#5b8b7f','#8e7b6b','#6b8e7b','#8e6b7b'];
+    var html = '<div style="margin:16px 0;">';
+    if (cd.title) html += '<h4 style="font-size:0.85rem;margin-bottom:8px;font-family:var(--font-ui);color:var(--text-muted);">' + esc(cd.title) + '</h4>';
+    html += '<div class="viz-bar-chart">';
+    values.forEach(function(v, i) {
+        var h = Math.max(2, Math.round(v / maxVal * 100));
+        var c = colors[i % colors.length];
+        html += '<div class="viz-bar-col">' +
+            '<span class="viz-bar-value">' + v + '</span>' +
+            '<div class="viz-bar-fill" style="height:' + h + '%;background:' + c + ';"></div>' +
+            '<span class="viz-bar-label">' + esc(labels[i] || '') + '</span>' +
+        '</div>';
+    });
+    html += '</div></div>';
+    return html;
+}
+
+// ===== Visualization: Donut Chart (SVG) =====
+function renderDonutChart(cd) {
+    var labels = cd.labels || [];
+    var values = cd.values || [];
+    var colors = ['#5b7b6f','#6b7d8e','#8b7355','#7b6b8e','#5b8b7f','#8e7b6b','#6b8e7b','#8e6b7b'];
+    var total = values.reduce(function(a,b) { return a+b; }, 0) || 1;
+    var r = 60, cx = 70, cy = 70, circumference = 2 * Math.PI * r;
+    var accumulated = 0;
+
+    var html = '<div style="margin:16px 0;">';
+    if (cd.title) html += '<h4 style="font-size:0.85rem;margin-bottom:8px;font-family:var(--font-ui);color:var(--text-muted);">' + esc(cd.title) + '</h4>';
+    html += '<div class="viz-donut-wrap">';
+    html += '<svg width="140" height="140" viewBox="0 0 140 140" style="flex-shrink:0;">';
+
+    values.forEach(function(v, i) {
+        var pct = v / total;
+        var dashLen = pct * circumference;
+        var dashOffset = -accumulated * circumference;
+        accumulated += pct;
+        html += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + colors[i % colors.length] + '" stroke-width="16" stroke-dasharray="' + dashLen.toFixed(1) + ' ' + (circumference - dashLen).toFixed(1) + '" stroke-dashoffset="' + dashOffset.toFixed(1) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="transition:stroke-dasharray 0.6s ease;"/>';
+    });
+
+    html += '<text x="' + cx + '" y="' + (cy-4) + '" text-anchor="middle" font-size="16" font-weight="600" fill="var(--text)">' + total + '</text>';
+    html += '<text x="' + cx + '" y="' + (cy+14) + '" text-anchor="middle" font-size="10" fill="var(--text-muted)" font-family="var(--font-ui)">总计</text>';
+    html += '</svg>';
+
+    html += '<div class="viz-donut-legend">';
+    values.forEach(function(v, i) {
+        var pct = Math.round(v / total * 100);
+        html += '<div class="viz-donut-legend-item"><span class="viz-donut-dot" style="background:' + colors[i % colors.length] + ';"></span>' + esc(labels[i] || '') + '：' + v + '（' + pct + '%）</div>';
+    });
+    html += '</div></div></div>';
+    return html;
+}
+
+// ===== Visualization: Radar Chart (SVG, 4-axis) =====
+function renderRadarChart(scores, labels, title) {
+    var cx = 100, cy = 100, r = 75;
+    var n = scores.length;
+    if (n !== 4) return ''; // Only 4-axis for now (MBTI)
+    var angles = [-90, 0, 90, 180]; // top, right, bottom, left
+
+    var html = '<div class="viz-radar-wrap">';
+    if (title) html += '<h4 style="font-size:0.8rem;text-align:center;margin-bottom:8px;font-family:var(--font-ui);color:var(--text-muted);">' + esc(title) + '</h4>';
+    html += '<svg width="240" height="220" viewBox="0 0 200 220">';
+
+    // Grid circles
+    [0.25, 0.5, 0.75, 1].forEach(function(s) {
+        var pts = angles.map(function(a) {
+            var rad = a * Math.PI / 180;
+            return (cx + Math.cos(rad) * r * s).toFixed(1) + ',' + (cy + Math.sin(rad) * r * s).toFixed(1);
+        }).join(' ');
+        html += '<polygon points="' + pts + '" fill="none" stroke="var(--border)" stroke-width="1"/>';
+    });
+
+    // Axis lines
+    angles.forEach(function(a) {
+        var rad = a * Math.PI / 180;
+        html += '<line x1="' + cx + '" y1="' + cy + '" x2="' + (cx + Math.cos(rad) * r).toFixed(1) + '" y2="' + (cy + Math.sin(rad) * r).toFixed(1) + '" stroke="var(--border)" stroke-width="1"/>';
+    });
+
+    // Data polygon
+    var dataPts = scores.map(function(s, i) {
+        var rad = angles[i] * Math.PI / 180;
+        return (cx + Math.cos(rad) * r * s).toFixed(1) + ',' + (cy + Math.sin(rad) * r * s).toFixed(1);
+    }).join(' ');
+    html += '<polygon points="' + dataPts + '" fill="var(--accent)" fill-opacity="0.2" stroke="var(--accent)" stroke-width="2"/>';
+
+    // Data points
+    scores.forEach(function(s, i) {
+        var rad = angles[i] * Math.PI / 180;
+        var px = (cx + Math.cos(rad) * r * s).toFixed(1);
+        var py = (cy + Math.sin(rad) * r * s).toFixed(1);
+        html += '<circle cx="' + px + '" cy="' + py + '" r="4" fill="var(--accent)"/>';
+    });
+
+    // Labels
+    var labelOffsets = [[0,-12],[14,4],[0,16],[-14,4]];
+    scores.forEach(function(s, i) {
+        var rad = angles[i] * Math.PI / 180;
+        var lx = (cx + Math.cos(rad) * (r + 18)).toFixed(1);
+        var ly = (cy + Math.sin(rad) * (r + 18) + 4).toFixed(1);
+        var pct = Math.round(s * 100);
+        html += '<text x="' + lx + '" y="' + ly + '" text-anchor="middle" font-size="11" font-family="var(--font-ui)" fill="var(--text)" font-weight="600">' + esc(labels[i]) + ' ' + pct + '%</text>';
+    });
+
+    html += '</svg></div>';
     return html;
 }
 </script>
