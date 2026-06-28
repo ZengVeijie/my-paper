@@ -451,8 +451,23 @@ $router->post('/api/insights/apps/generate', function() {
     $description = trim($data['description'] ?? '');
     if (empty($description)) json_response(['error' => '请描述你想要的应用功能'], 400);
 
+    $tool_specs = [
+        'cards' => "输出 JSON 格式（严格使用以下字段名）：\n{\n  \"items\": [\n    {\"title\": \"标题(10字内)\", \"type\": \"类型标签\", \"insight\": \"核心分析(100-300字)\", \"evidence\": \"引用原文1-2句\", \"suggestion\": \"具体建议\"}\n  ],\n  \"_layout\": \"cards\"\n}",
+        'list' => "输出 JSON 格式（严格使用以下字段名）：\n{\n  \"items\": [\n    {\"title\": \"标题\", \"content\": \"内容描述\"}\n  ],\n  \"_layout\": \"list\"\n}",
+        'mixed' => "输出 JSON 格式（严格使用以下字段名）：\n{\n  \"title\": \"分析标题\",\n  \"summary\": \"200-400字总体总结\",\n  \"items\": [\n    {\"title\": \"子项标题\", \"type\": \"类型标签\", \"insight\": \"分析内容\", \"evidence\": \"引用原文\", \"suggestion\": \"建议\"}\n  ],\n  \"chart_data\": {\"type\": \"bar|donut|line\", \"title\": \"图表标题\", \"labels\": [\"标签\"], \"values\": [数值], \"datasets\": [{\"label\": \"系列\", \"values\": [数值]}]},\n  \"_layout\": \"mixed\"\n}\n注：chart_data 可选，bar 需 labels+values，donut 需 labels+values，line 需 labels+datasets。",
+        'timeline' => "输出 JSON 格式（严格使用以下字段名）：\n{\n  \"timeline\": [\n    {\"date\": \"YYYY-MM-DD\", \"title\": \"事件标题\", \"description\": \"事件简要描述\", \"sentiment\": \"positive/neutral/negative\", \"tags\": [\"标签\"]}\n  ],\n  \"summary\": \"100-200字总述\",\n  \"_layout\": \"timeline\"\n}",
+        'mindmap' => "输出 JSON 格式（严格使用以下字段名）：\n{\n  \"mindmap\": {\n    \"topic\": \"核心主题\",\n    \"children\": [\n      {\"topic\": \"一级分支\", \"children\": [{\"topic\": \"二级节点\", \"children\": []}]}\n    ]\n  },\n  \"_layout\": \"mindmap\"\n}",
+        'wordcloud' => "输出 JSON 格式（严格使用以下字段名）：\n{\n  \"wordcloud\": [\n    {\"text\": \"词语\", \"weight\": 15}\n  ],\n  \"_layout\": \"wordcloud\"\n}\n注：weight 越大字号越大，最高频词建议 weight=20。",
+        'line' => "输出 JSON 格式（严格使用以下字段名）：\n{\n  \"chart_data\": {\n    \"type\": \"line\",\n    \"title\": \"趋势图标题\",\n    \"labels\": [\"1月\", \"2月\", \"3月\"],\n    \"datasets\": [{\"label\": \"系列A\", \"values\": [3, 5, 2]}]\n  },\n  \"_layout\": \"line\"\n}\n注：可多个数据集，每个数据集自动分配颜色。",
+        'calendar' => "输出 JSON 格式（严格使用以下字段名）：\n{\n  \"calendar\": {\n    \"title\": \"日历标题\",\n    \"months\": [\n      {\"month\": \"1月\", \"days\": [{\"day\": \"1\", \"date\": \"1月1日\", \"value\": 3, \"label\": \"3篇\"}]}\n    ]\n  },\n  \"_layout\": \"calendar\"\n}\n注：value 越大颜色越深。",
+    ];
+    $specs_text = '';
+    foreach ($tool_specs as $layout => $spec) {
+        $specs_text .= "=== {$layout} ===\n{$spec}\n\n";
+    }
+
     $result = call_deepseek(
-        "你是一个应用分析专家。用户描述了一个洞见分析需求，你需要生成应用元数据和给 AI 的分析提示词。\n\n你的任务不是写前端代码，而是编写高质量的 AI 分析提示词（analysis_prompt），它将被传给 DeepSeek 分析用户的日记内容。\n\n返回严格的 JSON：\n{\n  \"name\": \"应用名称（2-6字）\",\n  \"description\": \"20-50字的功能说明\",\n  \"analysis_prompt\": \"给 DeepSeek 的系统提示词，要求：\\n    - 明确分析视角和方法\\n    - 指定输出 JSON 结构（字段名用英文，内容用中文）\\n    - 引用原文证据\\n    - 温和、有洞察力的语气\\n    - 末尾加上「只输出JSON，不要其他文字」\",\n  \"result_layout\": \"cards|list|mixed|timeline|mindmap|wordcloud|line|calendar\"\n}\n\nresult_layout 说明：\n- cards: 结果是多项并列的数组（如多个发现、多条建议）\n- list: 结果是简单列表\n- mixed: 结果包含一个主体总结 + 可选的子项数组，可附加 chart_data（如盲区分析、CBT分析）\n- timeline: 结果是按时间排列的事件时间线，输出需包含 timeline 数组\n- mindmap: 结果是层级思维导图，输出需包含 mindmap: {topic, children:[{topic, children:[]}]}\n- wordcloud: 结果是词频统计词云，输出需包含 wordcloud: [{text, weight}]\n- line: 结果是时间序列折线图，输出需包含 chart_data: {type:\"line\", labels, datasets:[{label, values}]}\n- calendar: 结果是日历热力图，输出需包含 calendar: {title, months:[{month, days:[{day, date, value, label}]}]}\n\n只输出 JSON，不要其他文字。",
+        "你是一个应用分析专家。用户描述了一个洞见分析需求，你需要生成应用元数据和给 AI 的分析提示词。\n\n## 核心规则（极其重要）\n\n你的 analysis_prompt 将被直接传给 DeepSeek 执行分析。因此**analysis_prompt 必须是自包含的完整提示词**：\n1. 在 analysis_prompt 开头写清楚分析视角和方法\n2. **在 analysis_prompt 末尾，必须把下面「对应布局的输出 JSON 格式规范」原样粘贴进去**\n3. 末尾务必加上「只输出JSON，不要其他文字」\n\n## 可用布局及输出规范（选择其一，将其规范嵌入 analysis_prompt）\n\n{$specs_text}\n## 你的任务\n\n根据用户需求「{$description}」：\n1. 从上述布局中选择最合适的一个\n2. 编写 analysis_prompt = 你的分析方法说明 + 你选中的那个布局的输出规范原文 + 「只输出JSON，不要其他文字」\n\n返回严格的 JSON（不要带注释）：\n{\n  \"name\": \"应用名称（2-6字）\",\n  \"description\": \"20-50字的功能说明\",\n  \"analysis_prompt\": \"自包含的完整提示词\",\n  \"result_layout\": \"cards|list|mixed|timeline|mindmap|wordcloud|line|calendar\"\n}\n\n只输出 JSON，不要其他文字。",
         $description,
         0.7,
         2048
