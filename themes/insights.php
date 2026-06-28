@@ -506,6 +506,111 @@ foreach ($collections as $c) {
 
 /* Radar chart */
 .viz-radar-wrap { display:flex; justify-content:center; padding:16px 0; }
+
+/* Mind Map */
+.mindmap { padding:16px 0; overflow-x:auto; }
+.mm-root {
+    display:inline-block;
+    padding:10px 20px;
+    background:var(--accent);
+    color:#fff;
+    border-radius:8px;
+    font-weight:600;
+    font-size:0.95rem;
+    font-family:var(--font-ui);
+    margin-bottom:8px;
+}
+.mm-node { position:relative; padding:4px 0 4px 20px; border-left:2px solid var(--border); }
+.mm-node:last-child { border-left:2px solid transparent; }
+.mm-node::before {
+    content:'';
+    position:absolute;
+    left:-2px; top:50%;
+    width:14px;
+    height:2px;
+    background:var(--border);
+}
+.mm-label {
+    display:inline-block;
+    padding:6px 14px;
+    background:var(--bg-card);
+    border:1px solid var(--border);
+    border-radius:6px;
+    font-size:0.82rem;
+    font-family:var(--font-ui);
+    transition:border-color 0.15s;
+}
+.mm-label:hover { border-color:var(--accent); }
+.mm-children { margin-top:2px; }
+
+/* Word Cloud */
+.wordcloud {
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    justify-content:center;
+    gap:10px 16px;
+    padding:24px 16px;
+    min-height:120px;
+}
+.wc-word {
+    display:inline-block;
+    transition:transform 0.15s;
+    cursor:default;
+    font-family:var(--font-ui);
+    font-weight:600;
+    line-height:1.3;
+}
+.wc-word:hover { transform:scale(1.15); }
+
+/* Line Chart SVG */
+.viz-line-wrap { margin:16px 0; text-align:center; }
+.viz-line-wrap svg { max-width:100%; }
+
+/* Calendar Heatmap */
+.calendar-heatmap { padding:8px 0; }
+.cal-month { margin-bottom:16px; }
+.cal-month-label {
+    font-size:0.85rem;
+    font-weight:600;
+    font-family:var(--font-ui);
+    color:var(--text);
+    margin-bottom:6px;
+}
+.cal-days { display:flex; flex-wrap:wrap; gap:4px; }
+.cal-day {
+    width:32px;
+    height:32px;
+    border-radius:4px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    transition:transform 0.12s;
+    cursor:default;
+    position:relative;
+}
+.cal-day:hover { transform:scale(1.2); z-index:1; }
+.cal-day-num {
+    font-size:0.65rem;
+    font-family:var(--font-ui);
+    color:var(--text);
+    font-weight:500;
+}
+.cal-legend {
+    display:flex;
+    align-items:center;
+    gap:4px;
+    margin-top:8px;
+    font-size:0.7rem;
+    color:var(--text-muted);
+    font-family:var(--font-ui);
+}
+.cal-legend-swatch {
+    width:14px;
+    height:14px;
+    border-radius:3px;
+    flex-shrink:0;
+}
 </style>
 
 <script>
@@ -1119,9 +1224,28 @@ function renderAIResult(containerId, data, layout) {
         el.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:40px;">暂无结果</p>';
         return;
     }
-    // Auto-detect timeline structure
+    // Auto-detect specialized data structures
     if (data.timeline || layout === 'timeline') {
         el.innerHTML = '<div class="ai-result-wrapper">' + renderTimeline(data) + '</div>';
+        return;
+    }
+    if (data.mindmap || layout === 'mindmap') {
+        el.innerHTML = '<div class="ai-result-wrapper">' + renderMindmap(data) + '</div>';
+        return;
+    }
+    if (data.wordcloud || layout === 'wordcloud') {
+        el.innerHTML = '<div class="ai-result-wrapper">' + renderWordcloud(data) + '</div>';
+        return;
+    }
+    if (data.calendar || layout === 'calendar') {
+        el.innerHTML = '<div class="ai-result-wrapper">' + renderCalendar(data) + '</div>';
+        return;
+    }
+    if (data.chart_data && data.chart_data.type === 'line') {
+        el.innerHTML = '<div class="ai-result-wrapper">' +
+            '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;">' +
+            renderLineChart(data.chart_data) +
+            '</div></div>';
         return;
     }
     var html = '<div class="ai-result-wrapper">';
@@ -1190,6 +1314,11 @@ function renderResultMixed(data) {
     // Render donut chart if pie_data present
     if (data.chart_data && data.chart_data.type === 'donut') {
         html += renderDonutChart(data.chart_data);
+    }
+
+    // Render line chart if present
+    if (data.chart_data && data.chart_data.type === 'line') {
+        html += renderLineChart(data.chart_data);
     }
 
     var items = data.distortions || data.blindspots || data.events || data.items || data.results || data.dimensions || [];
@@ -1343,6 +1472,186 @@ function renderRadarChart(scores, labels, title) {
     });
 
     html += '</svg></div>';
+    return html;
+}
+
+// ===== Visualization: Mind Map =====
+function renderMindmap(data) {
+    var mm = data.mindmap;
+    if (!mm) return '<p style="color:var(--text-muted);text-align:center;padding:40px;">暂无思维导图数据</p>';
+
+    function renderNode(node, depth) {
+        var label = node.topic || node.name || node.label || '';
+        var children = node.children || node.items || [];
+        var html = '<div class="mm-node" style="margin-left:' + (depth * 20) + 'px;">';
+        html += '<div class="mm-label">' + esc(label) + '</div>';
+        if (children.length) {
+            html += '<div class="mm-children">' + children.map(function(c) { return renderNode(c, depth + 1); }).join('') + '</div>';
+        }
+        html += '</div>';
+        return html;
+    }
+
+    var rootTopic = mm.topic || mm.name || mm.title || '核心主题';
+    return '<div class="mindmap">' +
+        '<div class="mm-root">' + esc(rootTopic) + '</div>' +
+        (mm.children || mm.items || []).map(function(c) { return renderNode(c, 1); }).join('') +
+    '</div>';
+}
+
+// ===== Visualization: Word Cloud =====
+function renderWordcloud(data) {
+    var words = data.wordcloud || [];
+    if (!words.length) return '<p style="color:var(--text-muted);text-align:center;padding:40px;">暂无词云数据</p>';
+
+    var weights = words.map(function(w) { return w.weight || w.count || 1; });
+    var maxW = Math.max.apply(null, weights) || 1;
+    var minW = Math.min.apply(null, weights) || 1;
+    var range = maxW - minW || 1;
+
+    var colors = ['#5b7b6f','#6b7d8e','#8b7355','#7b6b8e','#5b8b7f','#8e7b6b','#6b8e7b','#8e6b7b','#5b6b8e','#7b5b6f','#6b5b7e','#5b8e6b'];
+
+    return '<div class="wordcloud">' + words.map(function(w, i) {
+        var weight = w.weight || w.count || 1;
+        // Scale between 0.8rem and 2.2rem
+        var size = 0.8 + ((weight - minW) / range) * 1.4;
+        return '<span class="wc-word" style="font-size:' + size.toFixed(1) + 'rem;color:' + colors[i % colors.length] + ';" title="' + esc(w.text || w.name || '') + '：出现 ' + weight + ' 次">' + esc(w.text || w.name || '') + '</span>';
+    }).join('') + '</div>';
+}
+
+// ===== Visualization: Line Chart (SVG) =====
+function renderLineChart(cd) {
+    var labels = cd.labels || [];
+    var datasets = cd.datasets || [];
+    if (!labels.length || !datasets.length) return '';
+
+    var colors = ['#5b7b6f','#e6a817','#6b7d8e','#c44b4b','#7b6b8e','#8b7355'];
+    var w = 600, h = 260;
+    var padL = 48, padR = 16, padT = 16, padB = 28;
+    var plotW = w - padL - padR, plotH = h - padT - padB;
+
+    // Find global max
+    var maxVal = 0;
+    datasets.forEach(function(ds) {
+        var m = Math.max.apply(null, ds.values || []);
+        if (m > maxVal) maxVal = m;
+    });
+    if (maxVal === 0) maxVal = 1;
+    // Round up to nice number
+    maxVal = Math.ceil(maxVal * 1.1);
+
+    var html = '<div class="viz-line-wrap">';
+    if (cd.title) html += '<h4 style="font-size:0.85rem;margin-bottom:8px;font-family:var(--font-ui);color:var(--text-muted);">' + esc(cd.title) + '</h4>';
+    html += '<svg width="100%" viewBox="0 0 ' + w + ' ' + h + '" style="max-width:600px;">';
+
+    // Horizontal grid lines
+    var gridLines = 4;
+    for (var i = 0; i <= gridLines; i++) {
+        var y = (padT + plotH / gridLines * i).toFixed(1);
+        var val = Math.round(maxVal * (1 - i / gridLines));
+        html += '<line x1="' + padL + '" y1="' + y + '" x2="' + (w - padR) + '" y2="' + y + '" stroke="var(--border)" stroke-width="1" stroke-dasharray="4,4"/>';
+        html += '<text x="' + (padL - 6) + '" y="' + y + '" dy="4" text-anchor="end" font-size="10" fill="var(--text-muted)" font-family="var(--font-ui)">' + val + '</text>';
+    }
+
+    // X-axis labels
+    var xStep = labels.length > 1 ? plotW / (labels.length - 1) : plotW;
+    labels.forEach(function(l, i) {
+        var x = (padL + xStep * i).toFixed(1);
+        html += '<text x="' + x + '" y="' + (h - 6) + '" text-anchor="middle" font-size="9" fill="var(--text-muted)" font-family="var(--font-ui)">' + esc(l) + '</text>';
+    });
+
+    // Data lines and dots
+    datasets.forEach(function(ds, di) {
+        var vals = ds.values || [];
+        var color = colors[di % colors.length];
+        if (vals.length < 2) return;
+
+        var points = vals.map(function(v, i) {
+            var x = padL + xStep * i;
+            var y = padT + plotH * (1 - v / maxVal);
+            return x.toFixed(1) + ',' + y.toFixed(1);
+        }).join(' ');
+
+        html += '<polyline points="' + points + '" fill="none" stroke="' + color + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+
+        // Dots
+        vals.forEach(function(v, i) {
+            var x = padL + xStep * i;
+            var y = padT + plotH * (1 - v / maxVal);
+            html += '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="4" fill="#fff" stroke="' + color + '" stroke-width="2"/>';
+        });
+    });
+
+    html += '</svg>';
+
+    // Legend
+    if (datasets.length > 1 || (datasets[0] && datasets[0].label)) {
+        html += '<div style="display:flex;gap:18px;justify-content:center;margin-top:6px;font-size:0.75rem;font-family:var(--font-ui);">';
+        datasets.forEach(function(ds, di) {
+            html += '<span style="display:flex;align-items:center;gap:5px;">' +
+                '<span style="width:12px;height:3px;border-radius:2px;background:' + colors[di % colors.length] + ';display:inline-block;"></span>' +
+                esc(ds.label || '系列' + (di+1)) +
+            '</span>';
+        });
+        html += '</div>';
+    }
+
+    html += '</div>';
+    return html;
+}
+
+// ===== Visualization: Calendar Heatmap =====
+function renderCalendar(data) {
+    var cal = data.calendar;
+    if (!cal) return '<p style="color:var(--text-muted);text-align:center;padding:40px;">暂无日历数据</p>';
+
+    var months = cal.months || [];
+    if (!months.length) return '<p style="color:var(--text-muted);text-align:center;padding:40px;">暂无日历数据</p>';
+
+    // Find max value for color scale
+    var maxVal = 0;
+    months.forEach(function(m) {
+        (m.days || []).forEach(function(d) {
+            var v = d.value || d.count || 0;
+            if (v > maxVal) maxVal = v;
+        });
+    });
+    if (maxVal === 0) maxVal = 1;
+
+    // Color intensity using accent with varying alpha
+    var accentR = 91, accentG = 123, accentB = 111;
+    function intensity(v) {
+        var p = v / maxVal;
+        var a = (0.08 + p * 0.92).toFixed(2);
+        return 'rgba(' + accentR + ',' + accentG + ',' + accentB + ',' + a + ')';
+    }
+
+    // Generate legend swatches
+    var legendHtml = '<div class="cal-legend"><span>较少</span>';
+    for (var li = 1; li <= 5; li++) {
+        legendHtml += '<span class="cal-legend-swatch" style="background:' + intensity(maxVal * li / 5) + ';"></span>';
+    }
+    legendHtml += '<span>较多</span></div>';
+
+    var html = '<div class="calendar-heatmap">';
+    if (cal.title) html += '<h4 style="font-size:0.85rem;margin-bottom:14px;font-family:var(--font-ui);color:var(--text-muted);text-align:center;">' + esc(cal.title) + '</h4>';
+
+    months.forEach(function(m) {
+        html += '<div class="cal-month">';
+        html += '<div class="cal-month-label">' + esc(m.month || m.name || '') + '</div>';
+        html += '<div class="cal-days">';
+        (m.days || []).forEach(function(d) {
+            var v = d.value || d.count || 0;
+            var dayNum = d.day || d.date || '';
+            var tooltip = esc(d.date || '') + ': ' + esc(d.label || (d.value || d.count || ''));
+            html += '<div class="cal-day" style="background:' + intensity(v) + ';" title="' + tooltip + '">';
+            html += '<span class="cal-day-num">' + esc(dayNum) + '</span>';
+            html += '</div>';
+        });
+        html += '</div></div>';
+    });
+
+    html += legendHtml + '</div>';
     return html;
 }
 </script>
