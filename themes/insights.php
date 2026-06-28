@@ -1248,11 +1248,16 @@ function renderAIResult(containerId, data, layout) {
             '</div></div>';
         return;
     }
+    // Extract array from object wrapper if needed (AI often wraps in {items, insights, results, etc.})
+    var arrayData = Array.isArray(data) ? data : null;
+    if (!arrayData) {
+        arrayData = data.insights || data.items || data.results || data.cards || data.distortions || data.blindspots || data.events || data.findings || null;
+    }
+
     var html = '<div class="ai-result-wrapper">';
-    if (layout === 'cards' && Array.isArray(data)) {
-        html += data.map(function(item, i) { return renderResultCard(item, i); }).join('');
-    } else if (layout === 'list' && Array.isArray(data)) {
-        html += data.map(function(item, i) { return renderResultListItem(item, i); }).join('');
+    if ((layout === 'cards' || layout === 'list') && arrayData) {
+        var renderFn = layout === 'list' ? renderResultListItem : renderResultCard;
+        html += arrayData.map(function(item, i) { return renderFn(item, i); }).join('');
     } else {
         html += renderResultMixed(data);
     }
@@ -1262,10 +1267,10 @@ function renderAIResult(containerId, data, layout) {
 
 function renderResultCard(item, idx) {
     var title = item.title || item.name || item.type || '';
-    var body = item.insight || item.intervention || item.content || item.summary || item.reasoning || item.description || '';
+    var body = item.insight || item.explanation || item.intervention || item.content || item.summary || item.reasoning || item.description || item.text || '';
     var quote = item.quote || item.evidence || '';
-    var sub = item.suggestion || item.detail || item.note || '';
-    var badge = item.type || item.label || item.confidence || item.mood || '';
+    var sub = item.suggestion || item.detail || item.note || item.advice || '';
+    var badge = item.type || item.bias || item.label || item.confidence || item.mood || item.sentiment || '';
     var colors = ['#5b7b6f','#6b7d8e','#8b7355','#7b6b8e','#5b8b7f','#8e7b6b'];
     var accent = colors[idx % colors.length];
 
@@ -1321,7 +1326,7 @@ function renderResultMixed(data) {
         html += renderLineChart(data.chart_data);
     }
 
-    var items = data.distortions || data.blindspots || data.events || data.items || data.results || data.dimensions || [];
+    var items = data.insights || data.distortions || data.blindspots || data.events || data.items || data.results || data.dimensions || data.findings || [];
     if (Array.isArray(items) && items.length) {
         html += '<div>' + items.map(function(item, i) { return renderResultCard(item, i); }).join('') + '</div>';
     }
