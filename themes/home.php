@@ -16,16 +16,14 @@ $show_articles = in_array($homepage_mode, ['both', 'articles_only']);
     </div>
 </div>
 
-<?php if ($show_articles): ?>
 <div class="search-bar">
     <form method="GET" action="/" class="search-form">
-        <input type="search" name="search" value="<?= h($search) ?>" placeholder="搜索文章..." class="search-input">
+        <input type="search" name="search" value="<?= h($search) ?>" placeholder="搜索文章和合辑..." class="search-input">
         <?php if ($search): ?>
             <a href="/" class="search-clear">清除</a>
         <?php endif; ?>
     </form>
 </div>
-<?php endif; ?>
 
 <?php if ($show_collections): ?>
 <section class="home-section">
@@ -35,8 +33,12 @@ $show_articles = in_array($homepage_mode, ['both', 'articles_only']);
     </div>
     <?php if (empty($collections)): ?>
         <div class="empty-state empty-state-sm">
-            <p>还没有合辑</p>
-            <p class="empty-hint"><a href="/collections">去创建</a>一个合辑，将文章归类整理</p>
+            <?php if ($search): ?>
+                <p>没有匹配的合辑</p>
+            <?php else: ?>
+                <p>还没有合辑</p>
+                <p class="empty-hint"><a href="/collections">去创建</a>一个合辑，将文章归类整理</p>
+            <?php endif; ?>
         </div>
     <?php else: ?>
         <div class="collections-grid">
@@ -108,6 +110,17 @@ $show_articles = in_array($homepage_mode, ['both', 'articles_only']);
                         <h2 class="article-title">
                             <a href="/article/<?= h($a['id']) ?>"><?= h($a['title'] ?: '无标题') ?></a>
                         </h2>
+                        <?php if (!empty($a['task_total'])): ?>
+                        <div class="task-progress" style="margin-top:4px;display:flex;align-items:center;gap:6px;font-size:0.75rem;color:var(--text-muted);font-family:var(--font-ui);">
+                            <span><?= $a['task_done'] ?>/<?= $a['task_total'] ?> 任务</span>
+                            <div style="flex:1;max-width:80px;height:4px;background:var(--border);border-radius:2px;overflow:hidden;">
+                                <div style="height:100%;width:<?= round($a['task_done'] / max($a['task_total'], 1) * 100) ?>%;background:var(--accent);border-radius:2px;"></div>
+                            </div>
+                            <?php if ($a['task_total'] > 0 && $a['task_done'] === $a['task_total']): ?>
+                                <span style="color:var(--accent);">全部完成</span>
+                            <?php endif; ?>
+                        </div>
+                        <?php endif; ?>
                         <?php if (!empty($a['summary'])): ?>
                             <p class="article-summary"><?= h($a['summary']) ?></p>
                         <?php else: ?>

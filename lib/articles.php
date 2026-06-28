@@ -1,6 +1,6 @@
 <?php
 /**
- * My Paper - 文章管理
+ * 平静之心 - 文章管理
  */
 
 require_once __DIR__ . '/helpers.php';
@@ -95,8 +95,9 @@ function handle_list_articles(): void {
     $total_pages = max(1, ceil($total / $per_page));
     $slice = array_slice($articles, ($page - 1) * $per_page, $per_page);
 
-    // 附加作者信息
+    // 附加作者信息 + 任务统计
     $slice = array_map('attach_author', $slice);
+    $slice = array_map('attach_task_stats', $slice);
 
     if (is_ajax()) {
         json_response([
@@ -151,6 +152,7 @@ function handle_list_internal(): void {
     $slice = array_slice($articles, ($page - 1) * $per_page, $per_page);
 
     $slice = array_map('attach_author', $slice);
+    $slice = array_map('attach_task_stats', $slice);
 
     if (is_ajax()) {
         json_response([
@@ -284,6 +286,7 @@ function handle_list_favorites(): void {
     $slice = array_slice($articles, ($page - 1) * $per_page, $per_page);
 
     $slice = array_map('attach_author', $slice);
+    $slice = array_map('attach_task_stats', $slice);
 
     if (is_ajax()) {
         json_response([
@@ -513,5 +516,13 @@ function handle_delete_draft(): void {
 function attach_author(array $article): array {
     $user = json_read(DATA_DIR . '/users/' . ($article['user_id'] ?? '') . '.json');
     $article['author_name'] = $user ? ($user['display_name'] ?? $user['username']) : '未知用户';
+    return $article;
+}
+
+function attach_task_stats(array $article): array {
+    $content = $article['content'] ?? '';
+    preg_match_all('/^\s*- \[([ x])\]/m', $content, $matches);
+    $article['task_total'] = count($matches[0]);
+    $article['task_done'] = count(array_filter($matches[1], fn($m) => $m === 'x'));
     return $article;
 }

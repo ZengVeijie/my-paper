@@ -56,7 +56,7 @@ $is_faved = in_array($article['id'], $user['favorite_article_ids'] ?? []);
             </div>
         </div>
 
-        <div class="article-body rendered-content"><?= h($article['content'] ?? '') ?></div>
+        <div class="article-body rendered-content" data-article-id="<?= h($article['id']) ?>" data-is-author="<?= $is_owner ? '1' : '0' ?>"><?= h($article['content'] ?? '') ?></div>
     </div>
 
     <!-- 右栏：留言区 -->

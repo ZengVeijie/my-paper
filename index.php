@@ -11,6 +11,7 @@ require_once __DIR__ . '/lib/articles.php';
 require_once __DIR__ . '/lib/backup.php';
 require_once __DIR__ . '/lib/notifications.php';
 require_once __DIR__ . '/lib/ai.php';
+require_once __DIR__ . '/lib/insights_apps.php';
 
 // Auto-detect subdirectory path from SCRIPT_NAME
 // e.g. /mypaper/index.php => BASE_PATH = /mypaper
@@ -47,6 +48,7 @@ $router->get('/', function() {
 
     // 加载合辑数据（当模式不为 articles_only 时）
     $collections = [];
+    $search = trim($_GET['search'] ?? '');
     if ($mode !== 'articles_only') {
         $collections = json_list(DATA_DIR . '/collections');
         // 仅展示自己的合辑 + 协作的合辑
@@ -54,8 +56,16 @@ $router->get('/', function() {
             return ($c['user_id'] ?? '') === $user['id']
                 || in_array($user['id'], $c['collaborator_ids'] ?? []);
         });
+        // 合辑搜索过滤
+        if ($search !== '') {
+            $collections = array_filter($collections, function($c) use ($search) {
+                $haystack = ($c['name'] ?? '') . ' ' . ($c['description'] ?? '');
+                return (function_exists('mb_stripos') ? mb_stripos($haystack, $search) : stripos($haystack, $search)) !== false;
+            });
+        }
         // 按创建时间倒序
         usort($collections, fn($a, $b) => ($b['created_at'] ?? '') <=> ($a['created_at'] ?? ''));
+        $collections = array_values($collections);
     }
 
     $GLOBALS['page_data']['homepage_mode'] = $mode;
@@ -121,11 +131,26 @@ $router->get('/collection/{id}', function($id) {
 
 $router->get('/insights', function() {
     require_login();
+    $user = current_user();
+    if (!isset($user['insights_apps'])) {
+        $user['insights_apps'] = ['sentiment', 'related', 'summary', 'stats'];
+        json_write(DATA_DIR . '/users/' . $user['id'] . '.json', $user);
+    }
+    $GLOBALS['page_data']['insights_apps'] = get_enabled_insights_apps();
+    $GLOBALS['page_data']['all_insights_apps'] = get_all_insights_apps();
+    $GLOBALS['insights_js'] = '';
     render_page('insights');
 });
 
 $router->get('/settings', function() {
     require_login();
+    $user = current_user();
+    if (!isset($user['insights_apps'])) {
+        $user['insights_apps'] = ['sentiment', 'related', 'summary', 'stats'];
+        json_write(DATA_DIR . '/users/' . $user['id'] . '.json', $user);
+    }
+    $GLOBALS['page_data']['all_insights_apps'] = get_all_insights_apps();
+    $GLOBALS['page_data']['user_insights_apps'] = get_user_insights_apps();
     render_page('settings');
 });
 
@@ -172,6 +197,43 @@ $router->post('/api/articles', 'handle_create_article');
 $router->put('/api/articles/{id}', 'handle_update_article');
 $router->delete('/api/articles/{id}', 'handle_delete_article');
 $router->post('/api/articles/{id}/favorite', 'handle_toggle_favorite');
+
+// 清单任务切换（仅作者）
+$router->post('/api/articles/{id}/toggle-task', function($id) {
+    require_login();
+    $article = json_read(DATA_DIR . '/articles/' . $id . '.json');
+    if (!$article) json_response(['error' => '文章不存在'], 404);
+
+    $user = current_user();
+    if ($article['user_id'] !== $user['id'] && $user['role'] !== 'admin') {
+        json_response(['error' => '无权修改'], 403);
+    }
+
+    $data = body_json();
+    $lineIdx = (int)($data['line_index'] ?? -1);
+    $checked = (bool)($data['checked'] ?? false);
+
+    $lines = explode("\n", $article['content'] ?? '');
+    if (!isset($lines[$lineIdx])) json_response(['error' => '行号无效'], 400);
+
+    if ($checked) {
+        if (preg_match('/^(\s*- )\[ \]/', $lines[$lineIdx])) {
+            $lines[$lineIdx] = preg_replace('/^(\s*- )\[ \]/', '$1[x]', $lines[$lineIdx], 1);
+            if (strpos($lines[$lineIdx], '(完成于') === false) {
+                $lines[$lineIdx] .= ' (完成于 ' . date('Y-m-d H:i') . ')';
+            }
+        }
+    } else {
+        $lines[$lineIdx] = preg_replace('/^(\s*- )\[x\]/', '$1[ ]', $lines[$lineIdx]);
+        $lines[$lineIdx] = preg_replace('/\s*\(完成于.*?\)$/', '', $lines[$lineIdx]);
+    }
+
+    $article['content'] = implode("\n", $lines);
+    $article['updated_at'] = date('c');
+    json_write(DATA_DIR . '/articles/' . $id . '.json', $article);
+
+    json_response(['ok' => true, 'content' => $article['content']]);
+});
 
 // ==================== API: 草稿 ====================
 
@@ -366,6 +428,144 @@ $router->post('/api/ai/templates', 'handle_ai_create_template');
 $router->put('/api/ai/templates/{id}', 'handle_ai_update_template');
 $router->delete('/api/ai/templates/{id}', 'handle_ai_delete_template');
 $router->post('/api/ai/template/{id}', 'handle_ai_use_template');
+
+// ==================== API: 洞见应用系统 ====================
+
+$router->get('/api/insights/apps', function() {
+    require_login();
+    json_response(get_all_insights_apps());
+});
+
+$router->put('/api/insights/apps/reorder', function() {
+    require_login();
+    $data = body_json();
+    $ids = $data['ids'] ?? [];
+    if (!is_array($ids)) json_response(['error' => '参数无效'], 400);
+    save_user_insights_apps($ids);
+    json_response(['ok' => true]);
+});
+
+$router->post('/api/insights/apps/generate', function() {
+    require_login();
+    $data = body_json();
+    $description = trim($data['description'] ?? '');
+    if (empty($description)) json_response(['error' => '请描述你想要的应用功能'], 400);
+
+    $result = call_deepseek(
+        '你是一个应用设计专家。用户会描述一个数据分析/洞察应用的需求。请生成一个应用定义。返回严格的JSON：{"name":"应用名称（2-6字）","description":"20-50字的功能说明","template":"前端HTML/JS代码，使用<div id=app-xxx>作为容器，所有交互在容器内完成，调用后端API使用fetch，UI风格简洁温暖中文"}注意：只输出JSON，不要其他文字',
+        $description,
+        0.7,
+        2048
+    );
+
+    if (isset($result['error'])) json_response($result, 500);
+
+    $ai_text = $result['text'] ?? '{}';
+    $generated = parse_ai_json($ai_text);
+    if (!is_array($generated) || empty($generated['name'])) {
+        json_response(['error' => '生成失败，请尝试更具体地描述需求'], 500);
+    }
+
+    $id = uuid();
+    $app_def = [
+        'id' => $id,
+        'name' => $generated['name'],
+        'description' => $generated['description'] ?? '',
+        'icon' => '🤖',
+        'source' => 'ai',
+        'render_type' => 'js',
+        'template' => $generated['template'] ?? '',
+        'api_spec' => $generated['api_spec'] ?? null,
+        'user_id' => current_user()['id'],
+        'created_at' => date('c'),
+    ];
+
+    $dir = DATA_DIR . '/insights_apps';
+    if (!is_dir($dir)) mkdir($dir, 0755, true);
+    json_write($dir . '/' . $id . '.json', $app_def);
+
+    json_response($app_def, 201);
+});
+
+$router->delete('/api/insights/apps/{id}', function($id) {
+    require_login();
+    $user = current_user();
+    $file = DATA_DIR . '/insights_apps/' . $id . '.json';
+    if (!file_exists($file)) json_response(['error' => '应用不存在'], 404);
+    $app = json_read($file);
+    if (!$app) json_response(['error' => '应用不存在'], 404);
+    if (($app['user_id'] ?? '') !== $user['id'] && $user['role'] !== 'admin') {
+        json_response(['error' => '无权删除'], 403);
+    }
+    json_delete($file);
+    // 也从用户的启用列表中移除
+    $enabled = get_user_insights_apps();
+    $enabled = array_values(array_filter($enabled, fn($aid) => $aid !== $id));
+    save_user_insights_apps($enabled);
+    json_response(['ok' => true]);
+});
+
+// ==================== API: 洞见分析（内置应用） ====================
+
+$router->post('/api/insights/mbti', function() {
+    require_login();
+    $data = body_json();
+    $scope = $data['scope'] ?? 'all';
+    $articles = resolve_insights_articles($scope);
+    if (empty($articles)) json_response(['error' => '没有可分析的文章'], 400);
+    $catalog = build_article_catalog($articles, 400);
+
+    $result = call_deepseek(
+        '你是一个MBTI心理分析专家。基于用户提供的日记内容，推断用户的MBTI人格类型（如INFJ、ENTP等），给出详细推理。从E/I、S/N、T/F、J/P四个维度分析，引用日记中的具体例证。返回严格的JSON：{"type":"INFJ","reasoning":"详细推理（含日记例证）...","confidence":"高/中/低"}。只输出JSON。',
+        "请分析以下日记：\n\n{$catalog}",
+        0.7,
+        2048
+    );
+
+    if (isset($result['error'])) json_response($result, 500);
+    $analysis = parse_ai_json($result['text'] ?? '');
+    json_response($analysis ?: ['error' => '分析失败，请稍后重试'], $analysis ? 200 : 500);
+});
+
+$router->post('/api/insights/cbt', function() {
+    require_login();
+    $data = body_json();
+    $scope = $data['scope'] ?? 'all';
+    $articles = resolve_insights_articles($scope);
+    if (empty($articles)) json_response(['error' => '没有可分析的文章'], 400);
+    $catalog = build_article_catalog($articles, 400);
+
+    $result = call_deepseek(
+        '你是一个CBT（认知行为疗法）治疗师。请分析用户日记中可能存在的3-5处认知扭曲，为每种提供具体的CBT干预建议。认知扭曲类型包括：非黑即白思维、过度概括、心理过滤、灾难化、情绪推理、应该/必须陈述、贴标签、个人化。引用原文句子，给出温和的建议。返回严格的JSON：{"distortions":[{"type":"类型","quote":"原文句子","intervention":"干预建议"}],"summary":"总体建议一段话"}。只输出JSON。',
+        "请分析以下日记：\n\n{$catalog}",
+        0.7,
+        2048
+    );
+
+    if (isset($result['error'])) json_response($result, 500);
+    $analysis = parse_ai_json($result['text'] ?? '');
+    json_response($analysis ?: ['error' => '分析失败，请稍后重试'], $analysis ? 200 : 500);
+});
+
+$router->post('/api/insights/blindspot', function() {
+    require_login();
+    $data = body_json();
+    $scope = $data['scope'] ?? 'all';
+    $articles = resolve_insights_articles($scope);
+    if (empty($articles)) json_response(['error' => '没有可分析的文章'], 400);
+    $catalog = build_article_catalog($articles, 400);
+
+    $result = call_deepseek(
+        '你是一个深邃的自我认知引导者。请通读用户的所有日记，找出3个用户自己可能没有意识到的关于自己的隐藏真相（盲区）。可以是：反复出现的模式、自相矛盾的信念、未被承认的情感需求、逃避的话题、自我设限的行为等。每个盲区引用具体的日记内容作为证据。语气坦诚但有温度。返回严格的JSON：{"blindspots":[{"title":"盲区标题（10字以内）","insight":"详细洞察","evidence":"引用原文证据","suggestion":"温和的改变建议"}],"summary":"一段总结"}。只输出JSON。',
+        "请通读并分析以下日记：\n\n{$catalog}",
+        0.7,
+        2048
+    );
+
+    if (isset($result['error'])) json_response($result, 500);
+    $analysis = parse_ai_json($result['text'] ?? '');
+    json_response($analysis ?: ['error' => '分析失败，请稍后重试'], $analysis ? 200 : 500);
+});
 
 // ==================== 启动 ====================
 

@@ -93,6 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initBackLink();
 
     renderMarkdown();
+    initChecklistInteraction();
     initAuthForms();
     initNotifications();
     initLightbox();
@@ -113,6 +114,69 @@ function renderMarkdown() {
             el.dataset.rendered = '1';
         }
     });
+}
+
+// ===== 清单任务交互 =====
+
+function initChecklistInteraction() {
+    document.querySelectorAll('.rendered-content[data-is-author="1"]').forEach(el => {
+        const articleId = el.dataset.articleId;
+        if (!articleId) return;
+
+        el.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+            checkbox.disabled = false;
+            checkbox.style.cursor = 'pointer';
+            checkbox.addEventListener('change', async function() {
+                const li = this.closest('li');
+                if (!li) return;
+                const liText = li.textContent.trim();
+                const rawLines = el.textContent.split('\n');
+                const lineIdx = findChecklistLine(rawLines, liText, this.checked);
+                if (lineIdx === -1) return;
+                this.disabled = true;
+                const ok = await toggleChecklistItem(articleId, lineIdx, this.checked);
+                if (!ok) {
+                    this.checked = !this.checked;
+                }
+                this.disabled = false;
+            });
+        });
+    });
+}
+
+function findChecklistLine(lines, liText, isChecked) {
+    const needle = liText.replace(/\s*\(完成于.*?\)$/, '').trim();
+    for (let i = 0; i < lines.length; i++) {
+        const m = lines[i].match(/^\s*- \[([ x])\]\s+(.*)/);
+        if (!m) continue;
+        const rawText = m[2].replace(/\s*\(完成于.*?\)$/, '').trim();
+        if (rawText === needle || rawText.includes(needle) || needle.includes(rawText)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+async function toggleChecklistItem(articleId, lineIdx, checked) {
+    try {
+        const resp = await fetch('/api/articles/' + articleId + '/toggle-task', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+            body: JSON.stringify({line_index: lineIdx, checked: checked})
+        });
+        const result = await resp.json();
+        if (result.ok && result.content) {
+            const el = document.querySelector('.article-body.rendered-content');
+            if (el) {
+                el.textContent = result.content;
+                el.dataset.rendered = '0';
+                renderMarkdown();
+                initChecklistInteraction();
+            }
+            return true;
+        }
+    } catch(e) { console.error(e); }
+    return false;
 }
 
 // ===== 认证表单 AJAX =====

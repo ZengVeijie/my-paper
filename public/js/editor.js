@@ -332,6 +332,20 @@ function toolbarAction(textarea, action) {
         case 'quote': before = '\n> '; break;
         case 'ul': before = '\n- '; break;
         case 'ol': before = '\n1. '; break;
+        case 'checklist':
+            if (sel && sel.includes('\n')) {
+                const lines = sel.split('\n');
+                const prefixed = lines.map(l => {
+                    const trimmed = l.trimStart();
+                    const indent = l.slice(0, l.length - trimmed.length);
+                    if (!trimmed) return l;
+                    return indent + '- [ ] ' + trimmed;
+                }).join('\n');
+                doReplace(textarea, prefixed, start, end, start + prefixed.length);
+                return;
+            }
+            before = '\n- [ ] ';
+            break;
         case 'link': before = '['; after = '](url)'; break;
         case 'image':
             const imgUrl = prompt('请输入图片 URL：');

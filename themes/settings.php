@@ -9,6 +9,7 @@
     <button class="tab-btn" onclick="switchSettingsTab('assistant', event)">助手管理</button>
     <button class="tab-btn" onclick="switchSettingsTab('data', event)">数据管理</button>
     <button class="tab-btn" onclick="switchSettingsTab('shares', event)">分享管理</button>
+    <button class="tab-btn" onclick="switchSettingsTab('apps', event)">App 仓库</button>
 </div>
 
 <!-- 个人设置 -->
@@ -137,6 +138,27 @@
     </section>
 </div>
 
+<!-- App 仓库 -->
+<div class="admin-panel" id="settings-apps" style="display:none">
+    <section class="settings-section">
+        <h2>我的应用</h2>
+        <p class="section-desc">管理洞见页面的应用展示。拖拽排序、启用/禁用，或从仓库中彻底删除自定义应用。</p>
+        <div id="apps-list" style="margin-bottom:20px;">
+            <p style="color:var(--text-muted);font-size:0.85rem;">加载中...</p>
+        </div>
+    </section>
+
+    <section class="settings-section">
+        <h2>AI 生成新应用</h2>
+        <p class="section-desc">用一句话描述你想要的分析/洞察需求，AI 将自动生成一个完整的洞见应用。例如：<em>"分析我的情绪波动周期并给出作息建议"</em>、<em>"根据我记录的事件生成年度时间线"</em></p>
+        <div style="display:flex;gap:8px;align-items:flex-start;">
+            <input type="text" id="app-gen-desc" placeholder="描述你想要的洞见应用..." style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-ui);font-size:0.85rem;">
+            <button type="button" class="btn btn-primary" id="app-gen-btn" onclick="generateApp()" style="white-space:nowrap;">生成应用</button>
+        </div>
+        <div id="app-gen-result" style="margin-top:12px;"></div>
+    </section>
+</div>
+
 <!-- 分享管理 -->
 <div class="admin-panel" id="settings-shares" style="display:none">
     <section class="settings-section">
@@ -149,7 +171,7 @@
 </div>
 
 <script>
-let sharesLoaded = false, templatesLoaded = false;
+let sharesLoaded = false, templatesLoaded = false, appsLoaded = false;
 function switchSettingsTab(name, ev) {
     document.querySelectorAll('.admin-panel').forEach(p => p.style.display = 'none');
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -157,6 +179,7 @@ function switchSettingsTab(name, ev) {
     ev.target.classList.add('active');
     if (name === 'shares' && !sharesLoaded) { sharesLoaded = true; loadShares(); }
     if (name === 'assistant' && !templatesLoaded) { templatesLoaded = true; loadTemplates(); }
+    if (name === 'apps' && !appsLoaded) { appsLoaded = true; loadApps(); }
 }
 async function updatePages(e) {
     // Reuse updateProfile which sends to /api/auth/profile
@@ -364,5 +387,194 @@ async function deleteTemplate(id) {
         cancelEditTemplate();
         loadTemplates();
     } catch(e) { alert('删除失败'); }
+}
+
+// ===== App Warehouse =====
+let allApps = [];
+let userAppIds = [];
+
+async function loadApps() {
+    try {
+        var resp = await fetch('/api/insights/apps', {headers:{'X-Requested-With':'XMLHttpRequest'}});
+        allApps = await resp.json();
+        userAppIds = <?= json_encode($user_insights_apps ?? [], JSON_UNESCAPED_UNICODE) ?>;
+        renderAppList();
+    } catch(e) { console.error(e); }
+}
+
+function renderAppList() {
+    var el = document.getElementById('apps-list');
+    if (!allApps.length) { el.innerHTML = '<p style="color:var(--text-muted);">暂无应用</p>'; return; }
+
+    var enabledIds = userAppIds.slice();
+    var disabledApps = allApps.filter(function(a) { return enabledIds.indexOf(a.id) === -1; });
+
+    el.innerHTML =
+        '<p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px;font-family:var(--font-ui);">已启用（' + enabledIds.length + '）— 拖动排序将影响洞见页展示顺序</p>' +
+        enabledIds.map(function(id) {
+            var a = allApps.find(function(x) { return x.id === id; });
+            if (!a) return '';
+            return renderAppRow(a, true, enabledIds);
+        }).join('') +
+        (disabledApps.length ? '<p style="font-size:0.8rem;color:var(--text-muted);margin:16px 0 8px;font-family:var(--font-ui);">未启用（' + disabledApps.length + '）</p>' : '') +
+        disabledApps.map(function(a) { return renderAppRow(a, false, enabledIds); }).join('');
+}
+
+function renderAppRow(app, enabled, enabledIds) {
+    var idx = enabledIds.indexOf(app.id);
+    var isBuiltin = app.source === 'builtin';
+    var sourceLabel = isBuiltin ? '内置' : (app.source === 'ai' ? 'AI 生成' : '自定义');
+    var sortBtns = '';
+    if (enabled) {
+        sortBtns =
+            '<button class="btn-text" onclick="moveApp(\'' + app.id + '\', -1)" ' + (idx === 0 ? 'disabled' : '') + ' style="font-size:0.65rem;padding:0 2px;" title="上移">▲</button>' +
+            '<button class="btn-text" onclick="moveApp(\'' + app.id + '\', 1)" ' + (idx === enabledIds.length - 1 ? 'disabled' : '') + ' style="font-size:0.65rem;padding:0 2px;" title="下移">▼</button>';
+    }
+
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border-light);gap:10px;">' +
+        '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">' + sortBtns + '</div>' +
+        '<div style="min-width:0;flex:1;">' +
+            '<div style="font-weight:500;font-size:0.85rem;">' + esc(app.icon || '') + ' ' + esc(app.name) +
+                ' <span style="font-size:0.65rem;color:var(--text-muted);font-family:var(--font-ui);">(' + sourceLabel + ')</span>' +
+            '</div>' +
+            '<div style="font-size:0.75rem;color:var(--text-muted);">' + esc(app.description || '') + '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:4px;flex-shrink:0;align-items:center;">' +
+            '<button class="btn btn-sm" onclick="toggleApp(\'' + app.id + '\', ' + enabled + ')">' + (enabled ? '已启用' : '启用') + '</button>' +
+            (isBuiltin ? '' : '<button class="btn-text btn-danger" onclick="deleteFromWarehouse(\'' + app.id + '\')" title="从仓库永久删除">删除</button>') +
+        '</div>' +
+    '</div>';
+}
+
+async function toggleApp(id, currentlyEnabled) {
+    var ids = userAppIds.slice();
+    if (currentlyEnabled) {
+        if (!confirm('确定从洞见页移除此应用？应用仍在仓库中，随时可以重新启用。')) return;
+        ids = ids.filter(function(x) { return x !== id; });
+    } else {
+        ids.push(id);
+    }
+
+    try {
+        var resp = await fetch('/api/insights/apps/reorder', {
+            method: 'PUT',
+            headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+            body: JSON.stringify({ids: ids})
+        });
+        var r = await resp.json();
+        if (r.ok) {
+            userAppIds = ids;
+            renderAppList();
+            showToast(currentlyEnabled ? '已从洞见移除' : '已添加到洞见', 'info');
+        } else {
+            alert(r.error || '操作失败');
+        }
+    } catch(e) { alert('请求失败'); }
+}
+
+async function moveApp(id, direction) {
+    var ids = userAppIds.slice();
+    var idx = ids.indexOf(id);
+    if (idx < 0) return;
+    var newIdx = idx + direction;
+    if (newIdx < 0 || newIdx >= ids.length) return;
+    ids.splice(idx, 1);
+    ids.splice(newIdx, 0, id);
+
+    try {
+        var resp = await fetch('/api/insights/apps/reorder', {
+            method: 'PUT',
+            headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+            body: JSON.stringify({ids: ids})
+        });
+        var r = await resp.json();
+        if (r.ok) {
+            userAppIds = ids;
+            renderAppList();
+        } else {
+            alert(r.error || '排序失败');
+        }
+    } catch(e) { alert('排序失败'); }
+}
+
+async function deleteFromWarehouse(id) {
+    var app = allApps.find(function(a) { return a.id === id; });
+    if (!app) return;
+    if (!confirm('确定从仓库中永久删除「' + app.name + '」？此操作不可恢复，所有用户的启用状态均会被清除。')) return;
+
+    try {
+        var resp = await fetch('/api/insights/apps/' + id, {
+            method: 'DELETE',
+            headers: {'X-Requested-With':'XMLHttpRequest'}
+        });
+        var r = await resp.json();
+        if (r.ok) {
+            userAppIds = userAppIds.filter(function(x) { return x !== id; });
+            allApps = allApps.filter(function(a) { return a.id !== id; });
+            renderAppList();
+            showToast('已从仓库删除', 'info');
+        } else {
+            alert(r.error || '删除失败');
+        }
+    } catch(e) { alert('删除失败'); }
+}
+
+async function generateApp() {
+    var descInput = document.getElementById('app-gen-desc');
+    var description = descInput.value.trim();
+    if (!description) { alert('请描述你想要的洞见应用'); return; }
+
+    var btn = document.getElementById('app-gen-btn');
+    var resultEl = document.getElementById('app-gen-result');
+    btn.disabled = true;
+    btn.textContent = '生成中...';
+    resultEl.innerHTML = '<p style="color:var(--text-muted);">AI 正在设计应用...</p>';
+
+    try {
+        var resp = await fetch('/api/insights/apps/generate', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+            body: JSON.stringify({description: description})
+        });
+        var result = await resp.json();
+        if (result.error) { resultEl.innerHTML = '<p style="color:var(--danger);">' + esc(result.error) + '</p>'; return; }
+
+        resultEl.innerHTML =
+            '<div class="summary-card" style="margin-top:0;">' +
+                '<h3>' + esc(result.icon || '') + ' ' + esc(result.name) + ' <span style="font-size:0.75rem;color:var(--text-muted);font-weight:normal;">生成成功</span></h3>' +
+                '<p style="font-size:0.85rem;color:var(--text-muted);margin:8px 0;">' + esc(result.description || '') + '</p>' +
+                '<div style="display:flex;gap:8px;">' +
+                    '<button class="btn btn-primary btn-sm" onclick="addGeneratedApp(\'' + result.id + '\')">添加到洞见</button>' +
+                    '<button class="btn btn-sm" onclick="document.getElementById(\'app-gen-result\').innerHTML=\'\';document.getElementById(\'app-gen-desc\').value=\'\';">关闭</button>' +
+                '</div>' +
+            '</div>';
+
+        allApps.push(result);
+        renderAppList();
+        descInput.value = '';
+    } catch(e) {
+        resultEl.innerHTML = '<p style="color:var(--danger);">生成失败: ' + esc(e.message) + '</p>';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '生成应用';
+    }
+}
+
+async function addGeneratedApp(id) {
+    var ids = userAppIds.slice();
+    if (ids.indexOf(id) === -1) ids.push(id);
+    try {
+        var resp = await fetch('/api/insights/apps/reorder', {
+            method: 'PUT',
+            headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+            body: JSON.stringify({ids: ids})
+        });
+        var r = await resp.json();
+        if (r.ok) {
+            userAppIds = ids;
+            renderAppList();
+            showToast('已添加到洞见页面', 'info');
+        }
+    } catch(e) { alert('添加失败'); }
 }
 </script>

@@ -58,6 +58,7 @@ $article_id = $article['id'] ?? '';
                 <button type="button" data-action="quote" title="引用">&ldquo;</button>
                 <button type="button" data-action="ul" title="无序列表">&bull;</button>
                 <button type="button" data-action="ol" title="有序列表">1.</button>
+                <button type="button" data-action="checklist" title="任务清单">☑</button>
                 <span class="toolbar-sep"></span>
                 <button type="button" data-action="link" title="链接">&#x1f517;</button>
                 <button type="button" data-action="image" title="图片">&#x1f5bc;</button>
