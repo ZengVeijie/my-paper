@@ -452,7 +452,7 @@ $router->post('/api/insights/apps/generate', function() {
     if (empty($description)) json_response(['error' => '请描述你想要的应用功能'], 400);
 
     $result = call_deepseek(
-        '你是一个应用设计专家。用户会描述一个数据分析/洞察应用的需求。请生成一个应用定义。返回严格的JSON：{"name":"应用名称（2-6字）","description":"20-50字的功能说明","template":"前端HTML/JS代码，使用<div id=app-xxx>作为容器，所有交互在容器内完成，调用后端API使用fetch，UI风格简洁温暖中文"}注意：只输出JSON，不要其他文字',
+        "你是一个应用分析专家。用户描述了一个洞见分析需求，你需要生成应用元数据和给 AI 的分析提示词。\n\n你的任务不是写前端代码，而是编写高质量的 AI 分析提示词（analysis_prompt），它将被传给 DeepSeek 分析用户的日记内容。\n\n返回严格的 JSON：\n{\n  \"name\": \"应用名称（2-6字）\",\n  \"description\": \"20-50字的功能说明\",\n  \"analysis_prompt\": \"给 DeepSeek 的系统提示词，要求：\\n    - 明确分析视角和方法\\n    - 指定输出 JSON 结构（字段名用英文，内容用中文）\\n    - 引用原文证据\\n    - 温和、有洞察力的语气\\n    - 末尾加上「只输出JSON，不要其他文字」\",\n  \"result_layout\": \"cards|list|mixed\"\n}\n\nresult_layout 说明：\n- cards: 结果是多项并列的数组（如多个发现、多条建议）\n- list: 结果是简单列表\n- mixed: 结果包含一个主体总结 + 可选的子项数组（如盲区分析、CBT分析）\n\n只输出 JSON，不要其他文字。",
         $description,
         0.7,
         2048
@@ -462,8 +462,8 @@ $router->post('/api/insights/apps/generate', function() {
 
     $ai_text = $result['text'] ?? '{}';
     $generated = parse_ai_json($ai_text);
-    if (!is_array($generated) || empty($generated['name'])) {
-        json_response(['error' => '生成失败，请尝试更具体地描述需求'], 500);
+    if (!is_array($generated) || empty($generated['name']) || empty($generated['analysis_prompt'])) {
+        json_response(['error' => '生成失败，请尝试更具体地描述需求。例如："分析我的情绪波动周期并给出作息建议"'], 500);
     }
 
     $id = uuid();
@@ -471,20 +471,53 @@ $router->post('/api/insights/apps/generate', function() {
         'id' => $id,
         'name' => $generated['name'],
         'description' => $generated['description'] ?? '',
-        'icon' => '🤖',
+        'icon' => '',
         'source' => 'ai',
         'render_type' => 'js',
-        'template' => $generated['template'] ?? '',
-        'api_spec' => $generated['api_spec'] ?? null,
+        'template' => '',
+        'analysis_config' => [
+            'prompt' => $generated['analysis_prompt'],
+            'result_layout' => $generated['result_layout'] ?? 'mixed',
+        ],
         'user_id' => current_user()['id'],
         'created_at' => date('c'),
     ];
+
+    // 用组件库组装 HTML 模板
+    $app_def['template'] = build_ai_app_template($app_def);
 
     $dir = DATA_DIR . '/insights_apps';
     if (!is_dir($dir)) mkdir($dir, 0755, true);
     json_write($dir . '/' . $id . '.json', $app_def);
 
     json_response($app_def, 201);
+});
+
+$router->post('/api/insights/run/{id}', function($id) {
+    require_login();
+    $app = json_read(DATA_DIR . '/insights_apps/' . $id . '.json');
+    if (!$app) json_response(['error' => '应用不存在'], 404);
+
+    $config = $app['analysis_config'] ?? [];
+    $prompt = $config['prompt'] ?? '';
+    if (empty($prompt)) json_response(['error' => '该应用缺少分析配置'], 400);
+
+    $data = body_json();
+    $scope = $data['scope'] ?? 'all';
+    $articles = resolve_insights_articles($scope);
+    if (empty($articles)) json_response(['error' => '没有可分析的文章'], 400);
+    $catalog = build_article_catalog($articles, 400);
+
+    $result = call_deepseek($prompt, "请分析以下日记：\n\n{$catalog}", 0.7, 2048);
+
+    if (isset($result['error'])) json_response($result, 500);
+    $analysis = parse_ai_json($result['text'] ?? '');
+    if (!$analysis) {
+        json_response(['error' => '分析失败，AI 返回了无法解析的结果，请稍后重试'], 500);
+    }
+
+    $analysis['_layout'] = $config['result_layout'] ?? 'mixed';
+    json_response($analysis);
 });
 
 $router->delete('/api/insights/apps/{id}', function($id) {

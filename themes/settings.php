@@ -9,7 +9,7 @@
     <button class="tab-btn" onclick="switchSettingsTab('assistant', event)">助手管理</button>
     <button class="tab-btn" onclick="switchSettingsTab('data', event)">数据管理</button>
     <button class="tab-btn" onclick="switchSettingsTab('shares', event)">分享管理</button>
-    <button class="tab-btn" onclick="switchSettingsTab('apps', event)">App 仓库</button>
+    <button class="tab-btn" onclick="switchSettingsTab('apps', event)">洞见仓库</button>
 </div>
 
 <!-- 个人设置 -->
@@ -138,7 +138,7 @@
     </section>
 </div>
 
-<!-- App 仓库 -->
+<!-- 洞见仓库 -->
 <div class="admin-panel" id="settings-apps" style="display:none">
     <section class="settings-section">
         <h2>我的应用</h2>
@@ -434,7 +434,7 @@ function renderAppRow(app, enabled, enabledIds) {
     return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border-light);gap:10px;">' +
         '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">' + sortBtns + '</div>' +
         '<div style="min-width:0;flex:1;">' +
-            '<div style="font-weight:500;font-size:0.85rem;">' + esc(app.icon || '') + ' ' + esc(app.name) +
+            '<div style="font-weight:500;font-size:0.85rem;">' + esc(app.name) +
                 ' <span style="font-size:0.65rem;color:var(--text-muted);font-family:var(--font-ui);">(' + sourceLabel + ')</span>' +
             '</div>' +
             '<div style="font-size:0.75rem;color:var(--text-muted);">' + esc(app.description || '') + '</div>' +
@@ -541,7 +541,7 @@ async function generateApp() {
 
         resultEl.innerHTML =
             '<div class="summary-card" style="margin-top:0;">' +
-                '<h3>' + esc(result.icon || '') + ' ' + esc(result.name) + ' <span style="font-size:0.75rem;color:var(--text-muted);font-weight:normal;">生成成功</span></h3>' +
+                '<h3>' + esc(result.name) + ' <span style="font-size:0.75rem;color:var(--text-muted);font-weight:normal;">生成成功</span></h3>' +
                 '<p style="font-size:0.85rem;color:var(--text-muted);margin:8px 0;">' + esc(result.description || '') + '</p>' +
                 '<div style="display:flex;gap:8px;">' +
                     '<button class="btn btn-primary btn-sm" onclick="addGeneratedApp(\'' + result.id + '\')">添加到洞见</button>' +

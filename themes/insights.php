@@ -40,10 +40,10 @@ foreach ($collections as $c) {
 
 <div class="admin-tabs">
     <?php foreach ($insights_apps as $i => $app): ?>
-    <button class="tab-btn<?= $i === 0 ? ' active' : '' ?>" onclick="switchInsightsTab('<?= h($app['id']) ?>', event)"><?= h(($app['icon'] ?? '') . ' ' . $app['name']) ?></button>
+    <button class="tab-btn<?= $i === 0 ? ' active' : '' ?>" onclick="switchInsightsTab('<?= h($app['id']) ?>', event)"><?= h($app['name']) ?></button>
     <?php endforeach; ?>
     <?php if (empty($insights_apps)): ?>
-    <p style="color:var(--text-muted);padding:8px;">尚未启用任何洞见应用，请前往 <a href="/settings">设置 → App 仓库</a> 启用</p>
+    <p style="color:var(--text-muted);padding:8px;">尚未启用任何洞见应用，请前往 <a href="/settings">设置 → 洞见仓库</a> 启用</p>
     <?php endif; ?>
 </div>
 
@@ -151,7 +151,7 @@ foreach ($collections as $c) {
     </section>
 <?php endif; ?>
 <?php else: ?>
-    <?= $app['template'] ?? '' ?>
+    <?= build_ai_app_template($app) ?>
 <?php endif; ?>
 </div>
 <?php endforeach; ?>
@@ -340,6 +340,68 @@ foreach ($collections as $c) {
 .task-item .task-check { flex-shrink:0; margin-top:3px; color:var(--text-muted); }
 .task-item.task-done { color:var(--text-muted); text-decoration:line-through; }
 .task-item .task-date { font-size:0.7rem; color:var(--text-muted); margin-left:4px; white-space:nowrap; }
+
+/* AI 结果可视化 */
+.ai-result-wrapper { animation: fadeSlideIn 0.35s ease; }
+@keyframes fadeSlideIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+.ai-card {
+    background:var(--bg-card);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:20px;
+    margin-bottom:16px;
+    transition: box-shadow 0.2s;
+}
+.ai-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.04); }
+.ai-card-badge {
+    display:inline-block;
+    padding:3px 12px;
+    border-radius:12px;
+    font-size:0.75rem;
+    font-family:var(--font-ui);
+    margin-bottom:10px;
+    font-weight:600;
+    letter-spacing:0.02em;
+}
+.ai-card-quote {
+    margin:12px 0 0;
+    padding:10px 14px;
+    background:var(--bg);
+    border-radius:6px;
+    font-size:0.85rem;
+    line-height:1.7;
+    color:var(--text-secondary);
+    font-style:italic;
+}
+.ai-numbered-item {
+    padding:12px 0;
+    border-bottom:1px solid var(--border-light);
+    display:flex;
+    align-items:flex-start;
+    gap:12px;
+}
+.ai-numbered-circle {
+    flex-shrink:0;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:28px;
+    height:28px;
+    border-radius:50%;
+    background:var(--accent-light);
+    color:var(--accent);
+    font-size:0.8rem;
+    font-family:var(--font-ui);
+    font-weight:600;
+}
+.ai-summary-box {
+    margin-top:16px;
+    padding:14px 16px;
+    background:var(--accent-light);
+    border-radius:8px;
+    font-size:0.85rem;
+    line-height:1.8;
+}
 </style>
 
 <script>
@@ -903,5 +965,120 @@ async function analyzeBlindspot() {
     } catch(e) {
         resultEl.innerHTML = '<p style="color:var(--danger);">请求失败: ' + esc(e.message) + '</p>';
     }
+}
+
+// ===== AI App: Standard runner & result renderer =====
+
+async function runInsightsApp(appId) {
+    var scopeEl = document.getElementById('ai-scope-' + appId);
+    var loadingEl = document.getElementById('ai-loading-' + appId);
+    var resultEl = document.getElementById('ai-result-' + appId);
+    var errorEl = document.getElementById('ai-error-' + appId);
+    var scope = scopeEl ? scopeEl.value : 'all';
+
+    if (loadingEl) loadingEl.style.display = '';
+    if (resultEl) resultEl.innerHTML = '';
+    if (errorEl) errorEl.style.display = 'none';
+
+    try {
+        var resp = await fetch('/api/insights/run/' + appId, {
+            method: 'POST',
+            headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+            body: JSON.stringify({scope: scope})
+        });
+        var r = await resp.json();
+        if (loadingEl) loadingEl.style.display = 'none';
+
+        if (r.error) {
+            if (errorEl) { errorEl.style.display = ''; errorEl.textContent = r.error; }
+            return;
+        }
+
+        var layout = r._layout || 'mixed';
+        renderAIResult('ai-result-' + appId, r, layout);
+    } catch(e) {
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (errorEl) { errorEl.style.display = ''; errorEl.textContent = '请求失败: ' + e.message; }
+    }
+}
+
+function renderAIResult(containerId, data, layout) {
+    var el = document.getElementById(containerId);
+    if (!el) return;
+    if (!data || (Array.isArray(data) && !data.length)) {
+        el.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:40px;">暂无结果</p>';
+        return;
+    }
+    var html = '<div class="ai-result-wrapper">';
+    if (layout === 'cards' && Array.isArray(data)) {
+        html += data.map(function(item, i) { return renderResultCard(item, i); }).join('');
+    } else if (layout === 'list' && Array.isArray(data)) {
+        html += data.map(function(item, i) { return renderResultListItem(item, i); }).join('');
+    } else {
+        html += renderResultMixed(data);
+    }
+    html += '</div>';
+    el.innerHTML = html;
+}
+
+function renderResultCard(item, idx) {
+    var title = item.title || item.name || item.type || '';
+    var body = item.insight || item.intervention || item.content || item.summary || item.reasoning || item.description || '';
+    var quote = item.quote || item.evidence || '';
+    var sub = item.suggestion || item.detail || item.note || '';
+    var badge = item.type || item.label || item.confidence || item.mood || '';
+    var colors = ['#5b7b6f','#6b7d8e','#8b7355','#7b6b8e','#5b8b7f','#8e7b6b'];
+    var accent = colors[idx % colors.length];
+
+    return '<div class="ai-card" style="border-left:4px solid ' + accent + ';">' +
+        (badge ? '<span class="ai-card-badge" style="background:' + accent + '15;color:' + accent + ';">' + esc(badge) + '</span>' : '') +
+        (title ? '<h3 style="margin:0 0 10px;font-size:1.05rem;font-weight:600;">' + esc(title) + '</h3>' : '') +
+        (body ? '<p style="line-height:1.85;font-size:0.9rem;white-space:pre-wrap;margin:0;">' + esc(body) + '</p>' : '') +
+        (quote ? '<div class="ai-card-quote" style="border-left:3px solid ' + accent + '80;">' + esc(quote) + '</div>' : '') +
+        (sub ? '<p style="margin:10px 0 0;font-size:0.85rem;line-height:1.7;color:var(--text-muted);">' + esc(sub) + '</p>' : '') +
+    '</div>';
+}
+
+function renderResultListItem(item, idx) {
+    var title = item.title || item.name || '';
+    var body = item.content || item.summary || item.text || item.description || '';
+    return '<div class="ai-numbered-item">' +
+        '<span class="ai-numbered-circle">' + (idx+1) + '</span>' +
+        '<div style="min-width:0;">' +
+            (title ? '<div style="font-weight:600;font-size:0.9rem;margin-bottom:2px;">' + esc(title) + '</div>' : '') +
+            (body ? '<div style="font-size:0.85rem;color:var(--text-muted);line-height:1.6;">' + esc(body) + '</div>' : '') +
+        '</div>' +
+    '</div>';
+}
+
+function renderResultMixed(data) {
+    var html = '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;">';
+
+    var heading = data.title || data.type || data.name || '';
+    if (heading) {
+        html += '<div style="text-align:center;margin-bottom:20px;">' +
+            '<h3 style="font-size:1.2rem;margin:0;">' + esc(heading) + '</h3>' +
+            (data.confidence ? '<span style="display:inline-block;margin-top:6px;padding:2px 10px;border-radius:10px;font-size:0.75rem;font-family:var(--font-ui);background:var(--accent-light);color:var(--accent);">置信度：' + esc(data.confidence) + '</span>' : '') +
+        '</div>';
+    }
+
+    var primary = data.insight || data.summary || data.reasoning || data.content || '';
+    if (primary) {
+        html += '<div style="line-height:1.9;font-size:0.92rem;white-space:pre-wrap;margin-bottom:20px;">' + esc(primary) + '</div>';
+    }
+
+    var items = data.distortions || data.blindspots || data.events || data.items || data.results || data.dimensions || [];
+    if (Array.isArray(items) && items.length) {
+        html += '<div>' + items.map(function(item, i) { return renderResultCard(item, i); }).join('') + '</div>';
+    }
+
+    if (data.summary && items.length) {
+        html += '<div class="ai-summary-box">' +
+            '<span style="font-weight:600;color:var(--accent);">总结 </span>' + esc(data.summary) +
+        '</div>';
+    }
+
+    html += '</div>';
+    return html;
 }
 </script>
