@@ -172,6 +172,18 @@
 
 <script>
 let sharesLoaded = false, templatesLoaded = false, appsLoaded = false;
+(function() {
+    var hash = window.location.hash.slice(1);
+    if (hash === 'apps') {
+        document.querySelectorAll('.admin-panel').forEach(function(p) { p.style.display = 'none'; });
+        document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+        var panel = document.getElementById('settings-apps');
+        if (panel) panel.style.display = '';
+        var btn = document.querySelector('.tab-btn[onclick*="apps"]');
+        if (btn) btn.classList.add('active');
+        appsLoaded = true; loadApps();
+    }
+})();
 function switchSettingsTab(name, ev) {
     document.querySelectorAll('.admin-panel').forEach(p => p.style.display = 'none');
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));

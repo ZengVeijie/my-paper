@@ -36,6 +36,7 @@ foreach ($collections as $c) {
 ?>
 <div class="page-header">
     <h1>洞见</h1>
+    <a href="/settings#apps" class="btn btn-sm" style="margin-left:auto;">洞见仓库</a>
 </div>
 
 <div class="admin-tabs">

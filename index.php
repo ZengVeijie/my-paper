@@ -777,7 +777,7 @@ function render_page(string $view): void {
     if (!isset($data['title'])) {
         $titles = [
             'home'        => '首页',
-            'write'       => '写文章',
+            'write'       => '写作',
             'edit'        => '编辑文章',
             'article'     => null,
             'internal'    => '站内',
