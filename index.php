@@ -485,6 +485,7 @@ $router->post('/api/insights/apps/generate', function() {
 - compare: 双范围对比选择器（A vs B）。适用于对比分析类应用。
 - count_badge: 在标题旁显示已分析文章数量徽章。适用于统计类应用。
 - auto_run: 进入页面即自动开始分析，无需用户任何操作。必须搭配 input_type: "none" 使用。适用于无需用户筛选、默认分析全文的全局洞察类应用（如"今日心情快照""本周回顾"等）。
+- select_first: 分析前先让 AI 从文章列表中挑选出与问题/主题相关的文章，再对精选后的文章进行深度分析。必须搭配 input_type: "keyword" 或 "question" 使用。适用于问答式、主题分析等需要精准匹配的应用。文章数<=3时不触发挑选。
 
 ### style（视觉风格）
 - default: 标准卡片风格，整洁专业
@@ -545,6 +546,10 @@ $router->post('/api/insights/run/{id}', function($id) {
     $prompt = $config['prompt'] ?? '';
     if (empty($prompt)) json_response(['error' => '该应用缺少分析配置'], 400);
 
+    $opts = $config['template_opts'] ?? [];
+    $features = $opts['features'] ?? [];
+    $select_first = in_array('select_first', $features);
+
     $data = body_json();
     $scope = $data['scope'] ?? 'all';
     $mode = $data['mode'] ?? '';
@@ -584,6 +589,45 @@ $router->post('/api/insights/run/{id}', function($id) {
         if (!empty($articles_b)) {
             $articles = array_merge($articles, $articles_b);
             usort($articles, fn($a, $b) => ($b['created_at'] ?? '') <=> ($a['created_at'] ?? ''));
+        }
+    }
+
+    $total_articles = count($articles);
+
+    // ---- 挑选阶段：AI 先筛选相关文章 ----
+    if ($select_first && $total_articles > 3) {
+        // 构建轻量文章摘要列表供 AI 挑选
+        $article_list = '';
+        foreach ($articles as $a) {
+            $d = substr($a['created_at'] ?? '', 0, 10);
+            $t = $a['title'] ?? '';
+            $preview = $a['content'] ?? '';
+            if (function_exists('mb_strlen') ? mb_strlen($preview) > 200 : strlen($preview) > 200) {
+                $preview = (function_exists('mb_substr') ? mb_substr($preview, 0, 200) : substr($preview, 0, 200)) . '...';
+            }
+            $tags = implode(', ', $a['tags'] ?? []);
+            $article_list .= "[{$a['id']}] {$d} 《{$t}》" . ($tags ? " 标签：{$tags}" : "") . "\n  > {$preview}\n\n";
+        }
+
+        $select_context = '';
+        if ($question) $select_context .= "用户的问题：{$question}\n";
+        if ($keyword) $select_context .= "用户关注的关键词：{$keyword}\n";
+
+        $select_result = call_deepseek(
+            "你是一个精准的信息检索助手。用户有一个分析需求，你需要从文章列表中挑选出与分析需求相关的文章。\n\n规则：\n1. 只选真正相关的文章，无关的不要选\n2. 如果几乎所有文章都相关，可以全部选中（这种情况请说明理由）\n3. 最少选1篇\n\n返回严格JSON：\n{\n  \"selected_ids\": [\"文章id\"],\n  \"reason\": \"20字内简述挑选依据\",\n  \"select_all\": false\n}\n\n只输出JSON。",
+            "{$select_context}以下是所有文章的列表，请挑选与分析需求相关的文章：\n\n{$article_list}",
+            0.3,
+            1024
+        );
+
+        if (!isset($select_result['error'])) {
+            $selection = parse_ai_json($select_result['text'] ?? '');
+            if ($selection && !empty($selection['selected_ids'])) {
+                $selected_ids = $selection['selected_ids'];
+                $articles = array_filter($articles, fn($a) => in_array($a['id'], $selected_ids));
+                $articles = array_values($articles);
+            }
+            // 如果 AI 选不出来或选了全部，保持原样
         }
     }
 
@@ -636,6 +680,13 @@ $router->post('/api/insights/run/{id}', function($id) {
 
     $analysis['_layout'] = $config['result_layout'] ?? 'mixed';
     $analysis['_article_count'] = count($articles);
+    if ($select_first && $total_articles > 3) {
+        $analysis['_selection'] = [
+            'total' => $total_articles,
+            'selected' => count($articles),
+            'reason' => $selection['reason'] ?? '',
+        ];
+    }
     json_response($analysis);
 });
 
