@@ -157,6 +157,78 @@ foreach ($collections as $c) {
 <?php endforeach; ?>
 
 <style>
+/* ===== 标签栏优化（PC+移动） ===== */
+.admin-tabs {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--bg);
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+    gap: 2px;
+    padding: 6px 2px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--border-light);
+    /* 右侧渐隐提示可滚动 */
+    -webkit-mask-image: linear-gradient(to right, black calc(100% - 44px), transparent 100%);
+    mask-image: linear-gradient(to right, black calc(100% - 44px), transparent 100%);
+}
+.admin-tabs::-webkit-scrollbar { display: none; }
+
+.admin-tabs .tab-btn {
+    flex-shrink: 0;
+    padding: 8px 18px;
+    border-radius: 7px;
+    font-size: 0.84rem;
+    font-weight: 500;
+    border-bottom: none !important;
+    margin-bottom: 0;
+    transition: all 0.2s ease;
+    letter-spacing: 0.01em;
+}
+.admin-tabs .tab-btn:hover {
+    background: var(--bg-card);
+    color: var(--text);
+}
+.admin-tabs .tab-btn.active {
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+    box-shadow: 0 2px 10px rgba(91, 123, 111, 0.28);
+}
+
+@media (max-width: 768px) {
+    .admin-tabs {
+        padding: 4px 0;
+        gap: 4px;
+        margin-bottom: 14px;
+        -webkit-mask-image: linear-gradient(to right, black calc(100% - 36px), transparent 100%);
+        mask-image: linear-gradient(to right, black calc(100% - 36px), transparent 100%);
+    }
+    .admin-tabs .tab-btn {
+        padding: 10px 15px;
+        font-size: 0.8rem;
+        border-radius: 8px;
+    }
+}
+
+@media (max-width: 480px) {
+    .admin-tabs {
+        padding: 2px 0;
+        gap: 3px;
+        -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+        mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+    }
+    .admin-tabs .tab-btn {
+        padding: 9px 13px;
+        font-size: 0.78rem;
+    }
+}
+
 .sentiment-badge {
     display:inline-block;
     padding:2px 10px;
@@ -749,7 +821,14 @@ function switchInsightsTab(name, ev) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     var panel = document.getElementById('insights-' + name);
     if (panel) panel.style.display = '';
-    if (ev && ev.target) ev.target.classList.add('active');
+
+    // Activate the correct tab button
+    var activeBtn = ev && ev.target ? ev.target : document.querySelector('.tab-btn[onclick*="' + name + '"]');
+    if (activeBtn) {
+        activeBtn.classList.add('active');
+        // Smooth scroll the active tab into view
+        activeBtn.scrollIntoView({behavior: 'smooth', block: 'nearest', inline: 'center'});
+    }
 
     if (insightsLoaded[name]) return;
     insightsLoaded[name] = true;
