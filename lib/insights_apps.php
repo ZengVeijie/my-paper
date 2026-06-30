@@ -203,6 +203,7 @@ function build_ai_app_template(array $app): string {
     $input_type = $opts['input_type'] ?? 'scope';
     $features = $opts['features'] ?? [];
     $style = $opts['style'] ?? 'default';
+    $auto_run = in_array('auto_run', $features);
 
     // 生成合集 scope 选项（供 scope / compare 输入类型使用）
     $scope_opts = '';
@@ -319,10 +320,11 @@ function build_ai_app_template(array $app): string {
         HTML;
     }
 
-    // 操作按钮文案
+    // 操作按钮文案（auto_run + none 模式下不显示按钮）
+    $show_button = !($auto_run && $input_type === 'none');
     $btn_label = '开始分析';
     if ($input_type === 'question') $btn_label = '探索';
-    if (in_array('surprise', $features)) $btn_label = $btn_label;
+    $btn_html = $show_button ? "<button class=\"btn btn-primary btn-sm\" onclick=\"runInsightsApp('{$app_id}')\" style=\"flex-shrink:0;\">{$btn_label}</button>" : '';
 
     // ---- 组装 ----
     $panel_html = '';
@@ -332,7 +334,7 @@ function build_ai_app_template(array $app): string {
             {$compare_html}
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                 {$features_html}
-                <button class="btn btn-primary btn-sm" onclick="runInsightsApp('{$app_id}')" style="flex-shrink:0;">{$btn_label}</button>
+                {$btn_html}
             </div>
         </div>
         HTML;
@@ -341,16 +343,21 @@ function build_ai_app_template(array $app): string {
         <div class="ai-controls" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
             {$input_html}
             {$features_html}
-            <button class="btn btn-primary btn-sm" onclick="runInsightsApp('{$app_id}')" style="flex-shrink:0;">{$btn_label}</button>
+            {$btn_html}
         </div>
         HTML;
     } else {
-        $panel_html = <<<HTML
+        // none: 无输入控件
+        if ($show_button || $features_html) {
+            $panel_html = <<<HTML
         <div class="ai-controls" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
             {$features_html}
-            <button class="btn btn-primary btn-sm" onclick="runInsightsApp('{$app_id}')">{$btn_label}</button>
+            {$btn_html}
         </div>
         HTML;
+        } else {
+            $panel_html = '';
+        }
     }
 
     // 计数徽章
@@ -361,8 +368,10 @@ function build_ai_app_template(array $app): string {
         HTML;
     }
 
+    $auto_run_attr = $auto_run ? ' data-auto-run="true"' : '';
+
     return <<<HTML
-<section class="{$wrapper_class}">
+<section class="{$wrapper_class}"{$auto_run_attr}>
     <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">
         <h2>{$name}</h2>
         {$count_badge_html}

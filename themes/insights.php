@@ -889,8 +889,14 @@ function switchInsightsTab(name, ev) {
     var activeBtn = ev && ev.target ? ev.target : document.querySelector('.tab-btn[onclick*="' + name + '"]');
     if (activeBtn) {
         activeBtn.classList.add('active');
-        // Smooth scroll the active tab into view
         activeBtn.scrollIntoView({behavior: 'smooth', block: 'nearest', inline: 'center'});
+    }
+
+    // Auto-run AI apps
+    if (panel && panel.hasAttribute('data-auto-run') && !insightsLoaded[name]) {
+        insightsLoaded[name] = true;
+        runInsightsApp(name);
+        return;
     }
 
     if (insightsLoaded[name]) return;
@@ -908,6 +914,12 @@ document.addEventListener('DOMContentLoaded', function() {
     var firstPanel = document.querySelector('.admin-panel');
     if (!firstPanel) return;
     var appId = firstPanel.id.replace('insights-', '');
+    // Auto-run AI app
+    if (firstPanel.hasAttribute('data-auto-run')) {
+        insightsLoaded[appId] = true;
+        runInsightsApp(appId);
+        return;
+    }
     insightsLoaded[appId] = true;
     if (appId === 'sentiment') loadSentiments();
     else if (appId === 'stats') loadStats();
