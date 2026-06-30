@@ -1539,7 +1539,7 @@ async function runInsightsApp(appId, mode) {
     var scopeBEl = document.getElementById('ai-scope-b-' + appId);
     if (scopeBEl) body.scope_b = scopeBEl.value;
 
-    if (loadingEl) loadingEl.style.display = '';
+    if (loadingEl) loadingEl.style.display = 'block';
     if (resultEl) resultEl.innerHTML = '';
     if (errorEl) errorEl.style.display = 'none';
 
