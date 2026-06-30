@@ -546,6 +546,12 @@ $router->post('/api/insights/run/{id}', function($id) {
     $prompt = $config['prompt'] ?? '';
     if (empty($prompt)) json_response(['error' => '该应用缺少分析配置'], 400);
 
+    // 无 API key 时提前返回友好提示，避免无意义的后续处理
+    $api_key = get_ai_api_key();
+    if (empty($api_key)) {
+        json_response(['error' => '请先在设置中配置 AI API Key，然后即可使用洞见分析功能'], 400);
+    }
+
     $opts = $config['template_opts'] ?? [];
     $features = $opts['features'] ?? [];
     $select_first = in_array('select_first', $features);
@@ -663,19 +669,45 @@ $router->post('/api/insights/run/{id}', function($id) {
             }
         }
 
-        if (empty($summaries)) json_response(['error' => '分析失败，请稍后重试'], 500);
+        if (empty($summaries)) json_response(['error' => '分析失败：所有批次均未能完成，请检查 API 配置或稍后重试'], 500);
 
         $synthesis_input = "以下是从用户所有日记中分批提取的关键信息摘要，请基于这些信息完成分析：\n\n" . implode("\n\n---\n\n", $summaries);
         $result = call_deepseek($prompt, $synthesis_input, 0.7, $max_tokens);
+
+        // 合成失败时降级：将各批摘要作为原始结果返回
+        if (isset($result['error'])) {
+            $fallback = "## 分批阅读摘要（综合合成未能完成）\n\n" . implode("\n\n---\n\n", $summaries);
+            json_response([
+                'title' => '分批分析摘要',
+                'summary' => '深度分析综合合成时出错（' . $result['error'] . '），以下为各批次的关键信息摘要供手动参考。',
+                'insight' => $fallback,
+                '_layout' => 'mixed',
+                '_article_count' => count($articles),
+            ]);
+        }
     } else {
         $user_msg = "请分析以下日记：\n\n{$extra_context}\n{$catalog}";
         $result = call_deepseek($prompt, $user_msg, 0.7, $max_tokens);
     }
 
-    if (isset($result['error'])) json_response($result, 500);
+    if (isset($result['error'])) {
+        // 判断是否为 API key 缺失（可能在请求过程中被清空）
+        $msg = $result['error'];
+        if (strpos($msg, 'API Key') !== false || strpos($msg, '配置') !== false) {
+            json_response(['error' => $msg], 400);
+        }
+        json_response(['error' => 'AI 分析未能完成：' . $msg], 500);
+    }
     $analysis = parse_ai_json($result['text'] ?? '');
     if (!$analysis) {
-        json_response(['error' => '分析失败，AI 返回了无法解析的结果，请稍后重试'], 500);
+        // 解析失败：返回原始文本作为降级显示
+        json_response([
+            'title' => '分析结果',
+            'summary' => 'AI 返回了非标准格式的结果，以下是原始内容：',
+            'insight' => $result['text'] ?? '(空)',
+            '_layout' => 'mixed',
+            '_article_count' => count($articles),
+        ]);
     }
 
     $analysis['_layout'] = $config['result_layout'] ?? 'mixed';

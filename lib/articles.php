@@ -281,7 +281,7 @@ function handle_create_article(): void {
         'created_at' => $now,
         'updated_at' => $now,
     ];
-    auto_enrich_article($article);
+    try { auto_enrich_article($article); } catch (\Throwable $e) {}
     json_write(DATA_DIR . '/articles/' . $id . '.json', $article);
     json_response(attach_author($article), 201);
 }
@@ -302,7 +302,7 @@ function handle_update_article(string $id): void {
         if (isset($data[$key])) $article[$key] = $data[$key];
     }
     $article['updated_at'] = date('c');
-    auto_enrich_article($article);
+    try { auto_enrich_article($article); } catch (\Throwable $e) {}
 
     json_write(DATA_DIR . '/articles/' . $id . '.json', $article);
     json_response(attach_author($article));
