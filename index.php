@@ -467,8 +467,33 @@ $router->post('/api/insights/apps/generate', function() {
         $specs_text .= "=== {$layout} ===\n{$spec}\n\n";
     }
 
+    $template_opts_spec = <<<'EOS'
+## 模板配置（template_opts）
+
+你需要为应用选择输入控件和交互风格，让每个应用有独特的体验：
+
+### input_type（输入控件类型）
+- scope: 文章范围选择器（下拉选"所有文章"或某个合辑）。适用于大多数分析类应用。
+- keyword: 关键词输入框。适用于主题搜索、关键词分析等需要用户输入主题的应用。
+- question: 开放式问题输入框。适用于问答式探索、自省引导等对话式应用。
+- date_range: 起止日期选择器。适用于时间范围分析、周期性回顾等时间敏感应用。
+- none: 无额外输入，直接点击按钮即可。适用于全局分析、自动洞察等无需筛选的应用。
+
+### features（可选交互组件，0-3个）
+- surprise: 随机探索按钮（星形图标），随机选一篇文章分析。适用于探索发现类应用。
+- depth_slider: 分析深度滑块（简→深 三档）。适用于需要调节分析详细程度的应用。
+- compare: 双范围对比选择器（A vs B）。适用于对比分析类应用。
+- count_badge: 在标题旁显示已分析文章数量徽章。适用于统计类应用。
+
+### style（视觉风格）
+- default: 标准卡片风格，整洁专业
+- minimal: 极简风格，少装饰、轻量级
+- explorer: 探索风格，更大间距、更有趣味的色调
+
+EOS;
+
     $result = call_deepseek(
-        "你是一个应用分析专家。用户描述了一个洞见分析需求，你需要生成应用元数据和给 AI 的分析提示词。\n\n## 核心规则（极其重要）\n\n你的 analysis_prompt 将被直接传给 DeepSeek 执行分析。因此**analysis_prompt 必须是自包含的完整提示词**：\n1. 在 analysis_prompt 开头写清楚分析视角和方法\n2. **在 analysis_prompt 末尾，必须把下面「对应布局的输出 JSON 格式规范」原样粘贴进去**\n3. 末尾务必加上「只输出JSON，不要其他文字」\n\n## 可用布局及输出规范（选择其一，将其规范嵌入 analysis_prompt）\n\n{$specs_text}\n## 你的任务\n\n## 常用分析领域参考\n- 自我剖析：识别个人模式、盲区、价值观、成长轨迹（推荐 cards/mixed/mindmap）\n- 趋势分析：发现情绪、行为、关注点的变化趋势（推荐 line/mixed/calendar）\n- 节点总结：提炼关键转折点、里程碑事件和重要决定（推荐 timeline/report/mixed）\n- 报告生成：综合多维度分析和可视化，生成结构化报告（推荐 report/mixed）\n\n根据用户需求「{$description}」：\n1. 参考上述分析领域，从布局中选择最合适的一个\n2. 编写 analysis_prompt = 分析方法说明 + 你选中的那个布局的输出规范原文 + 「只输出JSON，不要其他文字」\n\n返回严格的 JSON（不要带注释）：\n{\n  \"name\": \"应用名称（2-6字）\",\n  \"description\": \"20-50字的功能说明\",\n  \"analysis_prompt\": \"自包含的完整提示词\",\n  \"result_layout\": \"cards|list|mixed|timeline|mindmap|wordcloud|line|calendar|report\"\n}\n\n只输出 JSON，不要其他文字。",
+        "你是一个应用分析专家。用户描述了一个洞见分析需求，你需要生成应用元数据和给 AI 的分析提示词。\n\n## 核心规则（极其重要）\n\n你的 analysis_prompt 将被直接传给 DeepSeek 执行分析。因此**analysis_prompt 必须是自包含的完整提示词**：\n1. 在 analysis_prompt 开头写清楚分析视角和方法\n2. **在 analysis_prompt 末尾，必须把下面「对应布局的输出 JSON 格式规范」原样粘贴进去**\n3. 末尾务必加上「只输出JSON，不要其他文字」\n\n## 可用布局及输出规范（选择其一，将其规范嵌入 analysis_prompt）\n\n{$specs_text}\n\n{$template_opts_spec}\n\n## 常用分析领域参考\n- 自我剖析：识别个人模式、盲区、价值观、成长轨迹（推荐 cards/mixed/mindmap）\n- 趋势分析：发现情绪、行为、关注点的变化趋势（推荐 line/mixed/calendar）\n- 节点总结：提炼关键转折点、里程碑事件和重要决定（推荐 timeline/report/mixed）\n- 报告生成：综合多维度分析和可视化，生成结构化报告（推荐 report/mixed）\n\n根据用户需求「{$description}」：\n1. 参考上述分析领域，从布局中选择最合适的一个\n2. 编写 analysis_prompt = 分析方法说明 + 你选中的那个布局的输出规范原文 + 「只输出JSON，不要其他文字」\n3. 根据应用特点选择 template_opts（input_type + features + style），让交互体验贴合功能\n\n返回严格的 JSON（不要带注释）：\n{\n  \"name\": \"应用名称（2-6字）\",\n  \"description\": \"20-50字的功能说明\",\n  \"analysis_prompt\": \"自包含的完整提示词\",\n  \"result_layout\": \"cards|list|mixed|timeline|mindmap|wordcloud|line|calendar|report\",\n  \"template_opts\": {\n    \"input_type\": \"scope|keyword|question|date_range|none\",\n    \"features\": [\"surprise\"],\n    \"style\": \"default|minimal|explorer\"\n  }\n}\n\n只输出 JSON，不要其他文字。",
         $description,
         0.7,
         2048
@@ -494,6 +519,7 @@ $router->post('/api/insights/apps/generate', function() {
         'analysis_config' => [
             'prompt' => $generated['analysis_prompt'],
             'result_layout' => $generated['result_layout'] ?? 'mixed',
+            'template_opts' => $generated['template_opts'] ?? ['input_type' => 'scope', 'features' => [], 'style' => 'default'],
         ],
         'user_id' => current_user()['id'],
         'created_at' => date('c'),
@@ -520,11 +546,60 @@ $router->post('/api/insights/run/{id}', function($id) {
 
     $data = body_json();
     $scope = $data['scope'] ?? 'all';
-    $articles = resolve_insights_articles($scope);
-    if (empty($articles)) json_response(['error' => '没有可分析的文章'], 400);
-    $catalog = build_article_catalog($articles, 400);
+    $mode = $data['mode'] ?? '';
+    $keyword = trim($data['keyword'] ?? '');
+    $question = trim($data['question'] ?? '');
+    $date_start = $data['date_start'] ?? '';
+    $date_end = $data['date_end'] ?? '';
+    $depth = intval($data['depth'] ?? 2);
 
-    $result = call_deepseek($prompt, "请分析以下日记：\n\n{$catalog}", 0.7, 2048);
+    // 惊喜模式：随机选一篇文章
+    if ($mode === 'surprise') {
+        $articles = resolve_insights_articles($scope);
+        if (empty($articles)) json_response(['error' => '没有可分析的文章'], 400);
+        $article = $articles[array_rand($articles)];
+        $articles = [$article];
+    } else {
+        $articles = resolve_insights_articles($scope);
+        if (empty($articles)) json_response(['error' => '没有可分析的文章'], 400);
+    }
+
+    // 日期范围过滤
+    if ($date_start || $date_end) {
+        $articles = array_filter($articles, function($a) use ($date_start, $date_end) {
+            $d = substr($a['created_at'] ?? '', 0, 10);
+            if ($date_start && $d < $date_start) return false;
+            if ($date_end && $d > $date_end) return false;
+            return true;
+        });
+        $articles = array_values($articles);
+        if (empty($articles)) json_response(['error' => '所选日期范围内没有文章'], 400);
+    }
+
+    // 对比模式：合并两个范围的文章
+    $scope_b = $data['scope_b'] ?? '';
+    if ($scope_b && $scope_b !== $scope) {
+        $articles_b = resolve_insights_articles($scope_b);
+        if (!empty($articles_b)) {
+            $articles = array_merge($articles, $articles_b);
+            usort($articles, fn($a, $b) => ($b['created_at'] ?? '') <=> ($a['created_at'] ?? ''));
+        }
+    }
+
+    $maxPerArticle = $depth === 1 ? 200 : ($depth === 3 ? 800 : 400);
+    $catalog = build_article_catalog($articles, $maxPerArticle);
+
+    // 构建用户消息，融入关键词/问题
+    $extra_context = '';
+    if ($keyword) $extra_context .= "用户关注关键词：{$keyword}\n";
+    if ($question) $extra_context .= "用户提出的问题：{$question}\n";
+    if ($scope_b && $scope_b !== $scope) $extra_context .= "这是一个对比分析，文章来自两个不同的范围。请关注两者的差异和共性。\n";
+    $extra_context .= "分析深度：{$depth}（1=简短, 2=标准, 3=深度）\n";
+    $user_msg = "请分析以下日记：\n\n{$extra_context}\n{$catalog}";
+
+    // 深度影响 token 限制
+    $max_tokens = $depth === 1 ? 1024 : ($depth === 3 ? 4096 : 2048);
+    $result = call_deepseek($prompt, $user_msg, 0.7, $max_tokens);
 
     if (isset($result['error'])) json_response($result, 500);
     $analysis = parse_ai_json($result['text'] ?? '');
@@ -533,6 +608,7 @@ $router->post('/api/insights/run/{id}', function($id) {
     }
 
     $analysis['_layout'] = $config['result_layout'] ?? 'mixed';
+    $analysis['_article_count'] = count($articles);
     json_response($analysis);
 });
 

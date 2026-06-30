@@ -475,7 +475,68 @@ foreach ($collections as $c) {
     line-height:1.8;
 }
 
-/* Timeline */
+/* Loading spinner */
+.ai-loading-panel { display:none;text-align:center;padding:40px; }
+.ai-loading-spinner {
+    width:36px;height:36px;
+    margin:0 auto 16px;
+    border:3px solid var(--border);
+    border-top-color:var(--accent);
+    border-radius:50%;
+    animation: aiSpin 0.8s linear infinite;
+}
+@keyframes aiSpin { to { transform:rotate(360deg); } }
+
+/* 模板风格变体 */
+.ai-app-minimal {}
+.ai-app-minimal .ai-controls { margin-bottom:12px; }
+.ai-app-minimal .ai-controls .btn {
+    background:transparent;
+    border:1px solid var(--border);
+    color:var(--text);
+    font-size:0.8rem;
+    padding:6px 16px;
+    border-radius:20px;
+}
+.ai-app-minimal .ai-controls .btn:hover { background:var(--bg);border-color:var(--text-muted); }
+
+.ai-app-explorer { background:linear-gradient(135deg, var(--bg-card) 0%, #faf8f5 100%);border-radius:var(--radius-lg, 12px);padding:24px; }
+.ai-app-explorer h2 { font-size:1.4rem;letter-spacing:-0.01em; }
+.ai-app-explorer .section-desc { font-size:0.9rem;line-height:1.7;color:var(--text-secondary); }
+.ai-app-explorer .ai-controls select,
+.ai-app-explorer .ai-controls input { border-radius:20px;padding:10px 16px;font-size:0.88rem; }
+.ai-app-explorer .ai-controls .btn { border-radius:20px;padding:10px 24px;font-size:0.88rem; }
+
+/* 惊喜按钮 */
+.ai-surprise-btn {
+    width:36px;height:36px;
+    padding:0;
+    border-radius:50%;
+    border:2px dashed var(--border);
+    background:var(--bg-card);
+    color:var(--text-muted);
+    cursor:pointer;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    transition: all 0.2s;
+}
+.ai-surprise-btn:hover { border-color:var(--accent);color:var(--accent);transform:rotate(15deg); }
+
+/* 计数徽章 */
+.ai-count-badge {
+    display:inline-block;
+    padding:2px 12px;
+    border-radius:12px;
+    background:var(--accent-light);
+    color:var(--accent);
+    font-size:0.72rem;
+    font-family:var(--font-ui);
+    font-weight:600;
+    animation: fadeSlideIn 0.4s ease;
+}
+
+/* 追问模块 */
 .timeline { position:relative; padding-left:32px; }
 .timeline::before {
     content:'';
@@ -1449,12 +1510,33 @@ function storeFollowUpContext(appId, scopeLabel, resultData) {
 
 // ===== AI App: Standard runner & result renderer =====
 
-async function runInsightsApp(appId) {
-    var scopeEl = document.getElementById('ai-scope-' + appId);
+async function runInsightsApp(appId, mode) {
+    mode = mode || '';
     var loadingEl = document.getElementById('ai-loading-' + appId);
     var resultEl = document.getElementById('ai-result-' + appId);
     var errorEl = document.getElementById('ai-error-' + appId);
-    var scope = scopeEl ? scopeEl.value : 'all';
+
+    // 收集各种可能的输入值
+    var body = {};
+    var scopeEl = document.getElementById('ai-scope-' + appId);
+    var scopeAEl = document.getElementById('ai-scope-a-' + appId);
+    var keywordEl = document.getElementById('ai-keyword-' + appId);
+    var questionEl = document.getElementById('ai-question-' + appId);
+    var dateStartEl = document.getElementById('ai-date-start-' + appId);
+    var dateEndEl = document.getElementById('ai-date-end-' + appId);
+    var depthEl = document.getElementById('ai-depth-' + appId);
+
+    body.scope = scopeEl ? scopeEl.value : (scopeAEl ? scopeAEl.value : 'all');
+    if (mode) body.mode = mode;
+    if (keywordEl && keywordEl.value.trim()) body.keyword = keywordEl.value.trim();
+    if (questionEl && questionEl.value.trim()) body.question = questionEl.value.trim();
+    if (dateStartEl && dateStartEl.value) body.date_start = dateStartEl.value;
+    if (dateEndEl && dateEndEl.value) body.date_end = dateEndEl.value;
+    if (depthEl) body.depth = depthEl.value;
+
+    // 对比模式
+    var scopeBEl = document.getElementById('ai-scope-b-' + appId);
+    if (scopeBEl) body.scope_b = scopeBEl.value;
 
     if (loadingEl) loadingEl.style.display = '';
     if (resultEl) resultEl.innerHTML = '';
@@ -1464,7 +1546,7 @@ async function runInsightsApp(appId) {
         var resp = await fetch('/api/insights/run/' + appId, {
             method: 'POST',
             headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
-            body: JSON.stringify({scope: scope})
+            body: JSON.stringify(body)
         });
         var r = await resp.json();
         if (loadingEl) loadingEl.style.display = 'none';
@@ -1476,9 +1558,25 @@ async function runInsightsApp(appId) {
 
         var layout = r._layout || 'mixed';
         renderAIResult('ai-result-' + appId, r, layout);
-        var scopeLabel = scopeEl && scopeEl.selectedOptions ? scopeEl.selectedOptions[0].text : '所有文章';
+
+        // 确定范围标签（用于追问上下文）
+        var scopeLabel = '所有文章';
+        if (scopeEl && scopeEl.selectedOptions) scopeLabel = scopeEl.selectedOptions[0].text;
+        else if (scopeAEl && scopeAEl.selectedOptions) scopeLabel = scopeAEl.selectedOptions[0].text;
+        else if (keywordEl && keywordEl.value.trim()) scopeLabel = '关键词: ' + keywordEl.value.trim();
+        else if (questionEl && questionEl.value.trim()) scopeLabel = '问题: ' + questionEl.value.trim();
+        else if (dateStartEl && dateStartEl.value) scopeLabel = dateStartEl.value + ' 至 ' + (dateEndEl ? dateEndEl.value : '今天');
+        if (mode === 'surprise') scopeLabel = '随机探索';
+
         storeFollowUpContext(appId, scopeLabel, r);
         renderFollowUpModule('ai-result-' + appId, appId, scopeLabel);
+
+        // 计数徽章
+        var countEl = document.getElementById('ai-count-' + appId);
+        if (countEl && r._article_count) {
+            countEl.textContent = '已分析 ' + r._article_count + ' 篇';
+            countEl.style.display = '';
+        }
     } catch(e) {
         if (loadingEl) loadingEl.style.display = 'none';
         if (errorEl) { errorEl.style.display = ''; errorEl.textContent = '请求失败: ' + e.message; }
