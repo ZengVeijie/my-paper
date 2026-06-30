@@ -509,19 +509,20 @@ foreach ($collections as $c) {
 
 /* 惊喜按钮 */
 .ai-surprise-btn {
-    width:36px;height:36px;
-    padding:0;
-    border-radius:50%;
-    border:2px dashed var(--border);
-    background:var(--bg-card);
-    color:var(--text-muted);
-    cursor:pointer;
     display:inline-flex;
     align-items:center;
-    justify-content:center;
+    gap:5px;
+    border:1px dashed var(--border);
+    background:var(--bg-card);
+    color:var(--text-secondary);
+    cursor:pointer;
+    border-radius:18px;
+    padding:6px 14px;
     transition: all 0.2s;
+    font-family:var(--font-ui);
 }
-.ai-surprise-btn:hover { border-color:var(--accent);color:var(--accent);transform:rotate(15deg); }
+.ai-surprise-btn:hover { border-color:var(--accent);color:var(--accent);background:var(--accent-light); }
+.ai-surprise-btn:active { transform:scale(0.96); }
 
 /* 计数徽章 */
 .ai-count-badge {
@@ -1699,11 +1700,7 @@ function renderResultMixed(data) {
     // Render radar chart if present
     if (data.chart_data && data.chart_data.type === 'radar') {
         var rd = data.chart_data;
-        html += renderRadarChart(
-            (rd.values || []).map(function(v) { return typeof v === 'number' ? v : v / 100; }),
-            rd.labels || [],
-            rd.title || ''
-        );
+        html += renderRadarChart(rd.values || [], rd.labels || [], rd.title || '');
     }
 
     var items = data.insights || data.distortions || data.blindspots || data.events || data.items || data.results || data.dimensions || data.findings || [];
@@ -1849,18 +1846,30 @@ function renderDonutChart(cd) {
     return html;
 }
 
-// ===== Visualization: Radar Chart (SVG, 4-axis) =====
+// ===== Visualization: Radar Chart (SVG, variable axes) =====
 function renderRadarChart(scores, labels, title) {
-    var cx = 100, cy = 100, r = 75;
     var n = scores.length;
-    if (n !== 4) return ''; // Only 4-axis for now (MBTI)
-    var angles = [-90, 0, 90, 180]; // top, right, bottom, left
+    if (n < 3) return ''; // Need at least 3 axes
+
+    // Normalize values to 0-1 range (if max > 1, treat as percentages)
+    var maxVal = Math.max.apply(null, scores);
+    var normalized = maxVal > 1 ? scores.map(function(v) { return v / 100; }) : scores;
+
+    // Calculate angles evenly, starting from top (-90°)
+    var angles = [];
+    for (var i = 0; i < n; i++) {
+        angles.push(-90 + (360 / n) * i);
+    }
+
+    var svgSize = 260;
+    var cx = 130, cy = 130, r = 90;
+    var colors = ['var(--accent)', '#e8965b', '#5b8b7f', '#8b6b9e', '#c47b5a', '#5b7b9e', '#9e7b5b', '#7b5b8e'];
 
     var html = '<div class="viz-radar-wrap">';
     if (title) html += '<h4 style="font-size:0.8rem;text-align:center;margin-bottom:8px;font-family:var(--font-ui);color:var(--text-muted);">' + esc(title) + '</h4>';
-    html += '<svg width="240" height="220" viewBox="0 0 200 220">';
+    html += '<svg width="' + svgSize + '" height="' + svgSize + '" viewBox="0 0 ' + svgSize + ' ' + svgSize + '" style="display:block;margin:0 auto;">';
 
-    // Grid circles
+    // Grid polygons
     [0.25, 0.5, 0.75, 1].forEach(function(s) {
         var pts = angles.map(function(a) {
             var rad = a * Math.PI / 180;
@@ -1876,28 +1885,38 @@ function renderRadarChart(scores, labels, title) {
     });
 
     // Data polygon
-    var dataPts = scores.map(function(s, i) {
+    var dataPts = normalized.map(function(s, i) {
         var rad = angles[i] * Math.PI / 180;
         return (cx + Math.cos(rad) * r * s).toFixed(1) + ',' + (cy + Math.sin(rad) * r * s).toFixed(1);
     }).join(' ');
     html += '<polygon points="' + dataPts + '" fill="var(--accent)" fill-opacity="0.2" stroke="var(--accent)" stroke-width="2"/>';
 
     // Data points
-    scores.forEach(function(s, i) {
+    normalized.forEach(function(s, i) {
         var rad = angles[i] * Math.PI / 180;
         var px = (cx + Math.cos(rad) * r * s).toFixed(1);
         var py = (cy + Math.sin(rad) * r * s).toFixed(1);
-        html += '<circle cx="' + px + '" cy="' + py + '" r="4" fill="var(--accent)"/>';
+        html += '<circle cx="' + px + '" cy="' + py + '" r="4" fill="' + (colors[i % colors.length]) + '"/>';
     });
 
-    // Labels
-    var labelOffsets = [[0,-12],[14,4],[0,16],[-14,4]];
-    scores.forEach(function(s, i) {
-        var rad = angles[i] * Math.PI / 180;
-        var lx = (cx + Math.cos(rad) * (r + 18)).toFixed(1);
-        var ly = (cy + Math.sin(rad) * (r + 18) + 4).toFixed(1);
-        var pct = Math.round(s * 100);
-        html += '<text x="' + lx + '" y="' + ly + '" text-anchor="middle" font-size="11" font-family="var(--font-ui)" fill="var(--text)" font-weight="600">' + esc(labels[i]) + ' ' + pct + '%</text>';
+    // Labels — position outside the circle based on angle quadrant
+    normalized.forEach(function(s, i) {
+        var angle = angles[i];
+        // Convert to standard 0-360 range for quadrant logic
+        var deg = ((angle % 360) + 360) % 360;
+        var rad = angle * Math.PI / 180;
+        var labelR = r + 26;
+        var lx = (cx + Math.cos(rad) * labelR).toFixed(1);
+        var ly = (cy + Math.sin(rad) * labelR + 5).toFixed(1);
+        var anchor = 'middle';
+        if (deg < 30 || deg > 330) anchor = 'middle';     // top
+        else if (deg >= 30 && deg < 150) anchor = 'start'; // right
+        else if (deg >= 150 && deg < 210) anchor = 'middle'; // bottom
+        else anchor = 'end';                                // left
+
+        var pct = Math.round(maxVal > 1 ? scores[i] : scores[i] * 100);
+        var labelText = (labels[i] || '') + ' ' + pct + '%';
+        html += '<text x="' + lx + '" y="' + ly + '" text-anchor="' + anchor + '" font-size="11" font-family="var(--font-ui)" fill="var(--text)" font-weight="600">' + esc(labelText) + '</text>';
     });
 
     html += '</svg></div>';
@@ -2117,9 +2136,7 @@ function renderReport(data) {
             else if (cd.type === 'donut') html += renderDonutChart(cd);
             else if (cd.type === 'line') html += renderLineChart(cd);
             else if (cd.type === 'radar') {
-                html += renderRadarChart(
-                    (cd.values || []).map(function(v) { return typeof v === 'number' ? v : v / 100; }),
-                    cd.labels || [],
+                html += renderRadarChart(cd.values || [], cd.labels || [],
                     cd.title || ''
                 );
             }

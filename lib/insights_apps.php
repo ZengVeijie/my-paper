@@ -278,11 +278,12 @@ function build_ai_app_template(array $app): string {
     // ---- 构建功能组件 ----
     $features_html = '';
 
-    // 惊喜按钮
+    // 惊喜按钮：随机选一篇文章分析
     if (in_array('surprise', $features)) {
         $features_html .= <<<HTML
-        <button class="btn btn-sm ai-surprise-btn" onclick="runInsightsApp('{$app_id}', 'surprise')" title="随机选一篇文章分析" style="flex-shrink:0;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.2h7.6l-6 4.8 2.4 7.2-6-4.8-6 4.8 2.4-7.2-6-4.8h7.6z"/></svg>
+        <button class="btn btn-sm ai-surprise-btn" onclick="runInsightsApp('{$app_id}', 'surprise')" title="随机抽取一篇文章，用新视角发现意外洞察" style="flex-shrink:0;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="2" width="8" height="8" rx="1"/><rect x="2" y="14" width="8" height="8" rx="1"/><rect x="14" y="14" width="8" height="8" rx="1"/></svg>
+            <span style="font-size:0.8rem;">随机一篇</span>
         </button>
         HTML;
     }
