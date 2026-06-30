@@ -611,6 +611,108 @@ foreach ($collections as $c) {
     border-radius:3px;
     flex-shrink:0;
 }
+
+/* Follow-up chat module */
+.follow-up-wrap {
+    margin-top:20px;
+    padding-top:16px;
+    border-top:2px solid var(--border);
+}
+.follow-up-title {
+    font-size:0.82rem;
+    font-family:var(--font-ui);
+    color:var(--text-muted);
+    margin-bottom:10px;
+}
+.follow-up-input-row {
+    display:flex;
+    gap:8px;
+}
+.follow-up-input {
+    flex:1;
+    padding:8px 12px;
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    background:var(--bg-card);
+    font-family:var(--font-ui);
+    font-size:0.85rem;
+    outline:none;
+    transition:border-color 0.15s;
+}
+.follow-up-input:focus { border-color:var(--accent); }
+.follow-up-answers { margin-top:12px; }
+.follow-up-answer {
+    margin-bottom:10px;
+    animation: fadeSlideIn 0.3s ease;
+}
+.follow-up-answer .fu-q {
+    font-size:0.8rem;
+    color:var(--accent);
+    font-weight:600;
+    font-family:var(--font-ui);
+    margin-bottom:4px;
+}
+.follow-up-answer .fu-a {
+    font-size:0.85rem;
+    line-height:1.8;
+    padding:10px 14px;
+    background:var(--bg);
+    border-radius:6px;
+    border-left:3px solid var(--accent);
+}
+
+/* Report layout */
+.report-wrap {
+    background:var(--bg-card);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    overflow:hidden;
+}
+.report-header {
+    padding:24px 24px 16px;
+    text-align:center;
+    border-bottom:1px solid var(--border-light);
+}
+.report-header h3 { margin:0 0 8px; font-size:1.2rem; }
+.report-header .report-summary {
+    font-size:0.85rem;
+    color:var(--text-muted);
+    line-height:1.7;
+    max-width:600px;
+    margin:0 auto;
+}
+.report-section {
+    padding:20px 24px;
+    border-bottom:1px solid var(--border-light);
+}
+.report-section:last-child { border-bottom:none; }
+.report-section h4 {
+    margin:0 0 10px;
+    font-size:1rem;
+    font-weight:600;
+    display:flex;
+    align-items:center;
+    gap:8px;
+}
+.report-section h4 .rs-num {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:24px;
+    height:24px;
+    border-radius:50%;
+    background:var(--accent);
+    color:#fff;
+    font-size:0.75rem;
+    font-family:var(--font-ui);
+    flex-shrink:0;
+}
+.report-section .rs-content {
+    font-size:0.88rem;
+    line-height:1.85;
+    color:var(--text);
+}
+.report-section .rs-chart { margin-top:14px; }
 </style>
 
 <script>
@@ -638,6 +740,8 @@ const sentimentTextColors = {
 
 // Track loaded states
 var insightsLoaded = {};
+// Follow-up context: stores previous analysis results for follow-up questions
+var followUpContext = {};
 
 // ===== Tab switching =====
 function switchInsightsTab(name, ev) {
@@ -1112,6 +1216,10 @@ async function analyzeMBTI() {
                 '<h3 style="margin-top:20px;">详细推理</h3>' +
                 '<p style="line-height:1.8;font-size:0.9rem;white-space:pre-wrap;">' + esc(r.reasoning || '') + '</p>' +
             '</div>';
+        var mbtiScopeEl = document.getElementById('mbti-scope');
+        var mbtiScopeLabel = mbtiScopeEl && mbtiScopeEl.selectedOptions ? mbtiScopeEl.selectedOptions[0].text : '所有文章';
+        storeFollowUpContext('builtin-mbti', mbtiScopeLabel, r);
+        renderFollowUpModule('mbti-result', 'builtin-mbti', mbtiScopeLabel);
     } catch(e) {
         resultEl.innerHTML = '<p style="color:var(--danger);">请求失败: ' + esc(e.message) + '</p>';
     }
@@ -1144,6 +1252,10 @@ async function analyzeCBT() {
                 '</div>';
             }).join('') +
             (r.summary ? '<div class="summary-card"><h3>总体建议</h3><p style="line-height:1.8;font-size:0.9rem;">' + esc(r.summary) + '</p></div>' : '');
+        var cbtScopeEl = document.getElementById('cbt-scope');
+        var cbtScopeLabel = cbtScopeEl && cbtScopeEl.selectedOptions ? cbtScopeEl.selectedOptions[0].text : '所有文章';
+        storeFollowUpContext('builtin-cbt', cbtScopeLabel, r);
+        renderFollowUpModule('cbt-result', 'builtin-cbt', cbtScopeLabel);
     } catch(e) {
         resultEl.innerHTML = '<p style="color:var(--danger);">请求失败: ' + esc(e.message) + '</p>';
     }
@@ -1177,9 +1289,83 @@ async function analyzeBlindspot() {
                 '</div>';
             }).join('') +
             (r.summary ? '<div class="summary-card"><h3>总结</h3><p style="line-height:1.8;font-size:0.9rem;">' + esc(r.summary) + '</p></div>' : '');
+        var bsScopeEl = document.getElementById('blindspot-scope');
+        var bsScopeLabel = bsScopeEl && bsScopeEl.selectedOptions ? bsScopeEl.selectedOptions[0].text : '所有文章';
+        storeFollowUpContext('builtin-blindspot', bsScopeLabel, r);
+        renderFollowUpModule('blindspot-result', 'builtin-blindspot', bsScopeLabel);
     } catch(e) {
         resultEl.innerHTML = '<p style="color:var(--danger);">请求失败: ' + esc(e.message) + '</p>';
     }
+}
+
+// ===== Follow-up questioning module =====
+
+function renderFollowUpModule(containerId, appId, scopeLabel) {
+    var el = document.getElementById(containerId);
+    if (!el) return;
+    // Avoid duplicate
+    if (document.getElementById('fu-wrap-' + appId)) return;
+
+    var html = '<div class="follow-up-wrap" id="fu-wrap-' + appId + '">' +
+        '<div class="follow-up-title">对此分析结果有疑问？继续追问</div>' +
+        '<div class="follow-up-input-row">' +
+            '<input type="text" class="follow-up-input" id="fu-input-' + appId + '" placeholder="输入追问..." onkeydown="if(event.key===\'Enter\')submitFollowUp(\'' + appId + '\')">' +
+            '<button class="btn btn-primary btn-sm" onclick="submitFollowUp(\'' + appId + '\')">发送</button>' +
+        '</div>' +
+        '<div class="follow-up-answers" id="fu-answers-' + appId + '"></div>' +
+    '</div>';
+    el.insertAdjacentHTML('beforeend', html);
+}
+
+async function submitFollowUp(appId) {
+    var inputEl = document.getElementById('fu-input-' + appId);
+    var answersEl = document.getElementById('fu-answers-' + appId);
+    if (!inputEl || !answersEl) return;
+    var question = inputEl.value.trim();
+    if (!question) return;
+
+    var ctx = followUpContext[appId];
+    if (!ctx) return;
+
+    inputEl.value = '';
+    inputEl.disabled = true;
+    answersEl.insertAdjacentHTML('beforeend',
+        '<div class="follow-up-answer"><div class="fu-q">' + esc(question) + '</div><div class="fu-a" style="color:var(--text-muted);">思考中...</div></div>');
+
+    try {
+        var resp = await fetch('/api/insights/run/' + appId + '/follow-up', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+            body: JSON.stringify({
+                question: question,
+                prev_result: ctx.prevResult,
+                scope_label: ctx.scopeLabel
+            })
+        });
+        var r = await resp.json();
+        // Replace "思考中..." with actual answer
+        var lastAnswer = answersEl.querySelector('.follow-up-answer:last-child .fu-a');
+        if (lastAnswer) {
+            lastAnswer.textContent = r.answer || '抱歉，暂时无法回答。';
+            lastAnswer.style.color = '';
+        }
+    } catch(e) {
+        var lastAnswer = answersEl.querySelector('.follow-up-answer:last-child .fu-a');
+        if (lastAnswer) {
+            lastAnswer.textContent = '请求失败: ' + (e.message || '');
+            lastAnswer.style.color = 'var(--danger)';
+        }
+    }
+    inputEl.disabled = false;
+    inputEl.focus();
+}
+
+// Store follow-up context (call after rendering result)
+function storeFollowUpContext(appId, scopeLabel, resultData) {
+    followUpContext[appId] = {
+        scopeLabel: scopeLabel || '所有文章',
+        prevResult: JSON.stringify(resultData).substring(0, 3000)
+    };
 }
 
 // ===== AI App: Standard runner & result renderer =====
@@ -1211,6 +1397,9 @@ async function runInsightsApp(appId) {
 
         var layout = r._layout || 'mixed';
         renderAIResult('ai-result-' + appId, r, layout);
+        var scopeLabel = scopeEl && scopeEl.selectedOptions ? scopeEl.selectedOptions[0].text : '所有文章';
+        storeFollowUpContext(appId, scopeLabel, r);
+        renderFollowUpModule('ai-result-' + appId, appId, scopeLabel);
     } catch(e) {
         if (loadingEl) loadingEl.style.display = 'none';
         if (errorEl) { errorEl.style.display = ''; errorEl.textContent = '请求失败: ' + e.message; }
@@ -1239,6 +1428,10 @@ function renderAIResult(containerId, data, layout) {
     }
     if (data.calendar || layout === 'calendar') {
         el.innerHTML = '<div class="ai-result-wrapper">' + renderCalendar(data) + '</div>';
+        return;
+    }
+    if (data.report || layout === 'report') {
+        el.innerHTML = '<div class="ai-result-wrapper">' + renderReport(data) + '</div>';
         return;
     }
     if (data.chart_data && data.chart_data.type === 'line') {
@@ -1324,6 +1517,16 @@ function renderResultMixed(data) {
     // Render line chart if present
     if (data.chart_data && data.chart_data.type === 'line') {
         html += renderLineChart(data.chart_data);
+    }
+
+    // Render radar chart if present
+    if (data.chart_data && data.chart_data.type === 'radar') {
+        var rd = data.chart_data;
+        html += renderRadarChart(
+            (rd.values || []).map(function(v) { return typeof v === 'number' ? v : v / 100; }),
+            rd.labels || [],
+            rd.title || ''
+        );
     }
 
     var items = data.insights || data.distortions || data.blindspots || data.events || data.items || data.results || data.dimensions || data.findings || [];
@@ -1701,6 +1904,54 @@ function renderCalendar(data) {
     });
 
     html += legendHtml + '</div>';
+    return html;
+}
+
+// ===== Visualization: Report =====
+function renderReport(data) {
+    var rp = data.report;
+    if (!rp) return '<p style="color:var(--text-muted);text-align:center;padding:40px;">暂无报告数据</p>';
+
+    var sections = rp.sections || [];
+    if (!sections.length) return '<p style="color:var(--text-muted);text-align:center;padding:40px;">暂无报告数据</p>';
+
+    var html = '<div class="report-wrap">';
+
+    // Header
+    html += '<div class="report-header">';
+    html += '<h3>' + esc(rp.title || '分析报告') + '</h3>';
+    if (rp.summary) html += '<div class="report-summary">' + esc(rp.summary) + '</div>';
+    html += '</div>';
+
+    // Sections
+    sections.forEach(function(sec, i) {
+        html += '<div class="report-section">';
+        html += '<h4><span class="rs-num">' + (i+1) + '</span>' + esc(sec.heading || sec.title || '章节' + (i+1)) + '</h4>';
+        if (sec.content) html += '<div class="rs-content">' + esc(sec.content) + '</div>';
+        if (sec.insight) html += '<div class="rs-content">' + esc(sec.insight) + '</div>';
+        if (sec.evidence) html += '<div class="ai-card-quote">' + esc(sec.evidence) + '</div>';
+        if (sec.suggestion) html += '<p style="margin-top:10px;font-size:0.85rem;color:var(--text-muted);line-height:1.7;">' + esc(sec.suggestion) + '</p>';
+
+        // Chart in section
+        if (sec.chart_data) {
+            var cd = sec.chart_data;
+            html += '<div class="rs-chart">';
+            if (cd.type === 'bar') html += renderBarChart(cd);
+            else if (cd.type === 'donut') html += renderDonutChart(cd);
+            else if (cd.type === 'line') html += renderLineChart(cd);
+            else if (cd.type === 'radar') {
+                html += renderRadarChart(
+                    (cd.values || []).map(function(v) { return typeof v === 'number' ? v : v / 100; }),
+                    cd.labels || [],
+                    cd.title || ''
+                );
+            }
+            html += '</div>';
+        }
+        html += '</div>';
+    });
+
+    html += '</div>';
     return html;
 }
 </script>

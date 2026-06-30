@@ -454,12 +454,13 @@ $router->post('/api/insights/apps/generate', function() {
     $tool_specs = [
         'cards' => "输出 JSON 格式（严格使用以下字段名）：\n{\n  \"items\": [\n    {\"title\": \"标题(10字内)\", \"type\": \"类型标签\", \"insight\": \"核心分析(100-300字)\", \"evidence\": \"引用原文1-2句\", \"suggestion\": \"具体建议\"}\n  ],\n  \"_layout\": \"cards\"\n}",
         'list' => "输出 JSON 格式（严格使用以下字段名）：\n{\n  \"items\": [\n    {\"title\": \"标题\", \"content\": \"内容描述\"}\n  ],\n  \"_layout\": \"list\"\n}",
-        'mixed' => "输出 JSON 格式（严格使用以下字段名）：\n{\n  \"title\": \"分析标题\",\n  \"summary\": \"200-400字总体总结\",\n  \"items\": [\n    {\"title\": \"子项标题\", \"type\": \"类型标签\", \"insight\": \"分析内容\", \"evidence\": \"引用原文\", \"suggestion\": \"建议\"}\n  ],\n  \"chart_data\": {\"type\": \"bar|donut|line\", \"title\": \"图表标题\", \"labels\": [\"标签\"], \"values\": [数值], \"datasets\": [{\"label\": \"系列\", \"values\": [数值]}]},\n  \"_layout\": \"mixed\"\n}\n注：chart_data 可选，bar 需 labels+values，donut 需 labels+values，line 需 labels+datasets。",
+        'mixed' => "输出 JSON 格式（严格使用以下字段名）：\n{\n  \"title\": \"分析标题\",\n  \"summary\": \"200-400字总体总结\",\n  \"items\": [\n    {\"title\": \"子项标题\", \"type\": \"类型标签\", \"insight\": \"分析内容\", \"evidence\": \"引用原文\", \"suggestion\": \"建议\"}\n  ],\n  \"chart_data\": {\"type\": \"bar|donut|line|radar\", \"title\": \"图表标题\", \"labels\": [\"标签\"], \"values\": [数值], \"datasets\": [{\"label\": \"系列\", \"values\": [数值]}]},\n  \"_layout\": \"mixed\"\n}\n注：chart_data 可选。bar 需 labels+values，donut 需 labels+values，line 需 labels+datasets，radar 需 labels+values（4轴雷达图）。",
         'timeline' => "输出 JSON 格式（严格使用以下字段名）：\n{\n  \"timeline\": [\n    {\"date\": \"YYYY-MM-DD\", \"title\": \"事件标题\", \"description\": \"事件简要描述\", \"sentiment\": \"positive/neutral/negative\", \"tags\": [\"标签\"]}\n  ],\n  \"summary\": \"100-200字总述\",\n  \"_layout\": \"timeline\"\n}",
         'mindmap' => "输出 JSON 格式（严格使用以下字段名）：\n{\n  \"mindmap\": {\n    \"topic\": \"核心主题\",\n    \"children\": [\n      {\"topic\": \"一级分支\", \"children\": [{\"topic\": \"二级节点\", \"children\": []}]}\n    ]\n  },\n  \"_layout\": \"mindmap\"\n}",
         'wordcloud' => "输出 JSON 格式（严格使用以下字段名）：\n{\n  \"wordcloud\": [\n    {\"text\": \"词语\", \"weight\": 15}\n  ],\n  \"_layout\": \"wordcloud\"\n}\n注：weight 越大字号越大，最高频词建议 weight=20。",
         'line' => "输出 JSON 格式（严格使用以下字段名）：\n{\n  \"chart_data\": {\n    \"type\": \"line\",\n    \"title\": \"趋势图标题\",\n    \"labels\": [\"1月\", \"2月\", \"3月\"],\n    \"datasets\": [{\"label\": \"系列A\", \"values\": [3, 5, 2]}]\n  },\n  \"_layout\": \"line\"\n}\n注：可多个数据集，每个数据集自动分配颜色。",
         'calendar' => "输出 JSON 格式（严格使用以下字段名）：\n{\n  \"calendar\": {\n    \"title\": \"日历标题\",\n    \"months\": [\n      {\"month\": \"1月\", \"days\": [{\"day\": \"1\", \"date\": \"1月1日\", \"value\": 3, \"label\": \"3篇\"}]}\n    ]\n  },\n  \"_layout\": \"calendar\"\n}\n注：value 越大颜色越深。",
+        'report' => "输出 JSON 格式（严格使用以下字段名）：\n{\n  \"report\": {\n    \"title\": \"报告标题\",\n    \"summary\": \"100-200字报告摘要\",\n    \"sections\": [\n      {\n        \"heading\": \"章节标题\",\n        \"content\": \"章节正文内容(150-300字)\",\n        \"chart_data\": {\"type\": \"bar|donut|line|radar\", \"title\": \"图表标题\", \"labels\": [\"标签\"], \"values\": [数值], \"datasets\": [{\"label\": \"系列\", \"values\": [数值]}]}\n      }\n    ]\n  },\n  \"_layout\": \"report\"\n}\n注：report 适用于综合报告生成。sections 至少2个，每个可附带可选 chart_data。四种图表类型：bar(柱状图)、donut(环形图)、line(折线图)、radar(雷达图)。",
     ];
     $specs_text = '';
     foreach ($tool_specs as $layout => $spec) {
@@ -467,7 +468,7 @@ $router->post('/api/insights/apps/generate', function() {
     }
 
     $result = call_deepseek(
-        "你是一个应用分析专家。用户描述了一个洞见分析需求，你需要生成应用元数据和给 AI 的分析提示词。\n\n## 核心规则（极其重要）\n\n你的 analysis_prompt 将被直接传给 DeepSeek 执行分析。因此**analysis_prompt 必须是自包含的完整提示词**：\n1. 在 analysis_prompt 开头写清楚分析视角和方法\n2. **在 analysis_prompt 末尾，必须把下面「对应布局的输出 JSON 格式规范」原样粘贴进去**\n3. 末尾务必加上「只输出JSON，不要其他文字」\n\n## 可用布局及输出规范（选择其一，将其规范嵌入 analysis_prompt）\n\n{$specs_text}\n## 你的任务\n\n根据用户需求「{$description}」：\n1. 从上述布局中选择最合适的一个\n2. 编写 analysis_prompt = 你的分析方法说明 + 你选中的那个布局的输出规范原文 + 「只输出JSON，不要其他文字」\n\n返回严格的 JSON（不要带注释）：\n{\n  \"name\": \"应用名称（2-6字）\",\n  \"description\": \"20-50字的功能说明\",\n  \"analysis_prompt\": \"自包含的完整提示词\",\n  \"result_layout\": \"cards|list|mixed|timeline|mindmap|wordcloud|line|calendar\"\n}\n\n只输出 JSON，不要其他文字。",
+        "你是一个应用分析专家。用户描述了一个洞见分析需求，你需要生成应用元数据和给 AI 的分析提示词。\n\n## 核心规则（极其重要）\n\n你的 analysis_prompt 将被直接传给 DeepSeek 执行分析。因此**analysis_prompt 必须是自包含的完整提示词**：\n1. 在 analysis_prompt 开头写清楚分析视角和方法\n2. **在 analysis_prompt 末尾，必须把下面「对应布局的输出 JSON 格式规范」原样粘贴进去**\n3. 末尾务必加上「只输出JSON，不要其他文字」\n\n## 可用布局及输出规范（选择其一，将其规范嵌入 analysis_prompt）\n\n{$specs_text}\n## 你的任务\n\n## 常用分析领域参考\n- 自我剖析：识别个人模式、盲区、价值观、成长轨迹（推荐 cards/mixed/mindmap）\n- 趋势分析：发现情绪、行为、关注点的变化趋势（推荐 line/mixed/calendar）\n- 节点总结：提炼关键转折点、里程碑事件和重要决定（推荐 timeline/report/mixed）\n- 报告生成：综合多维度分析和可视化，生成结构化报告（推荐 report/mixed）\n\n根据用户需求「{$description}」：\n1. 参考上述分析领域，从布局中选择最合适的一个\n2. 编写 analysis_prompt = 分析方法说明 + 你选中的那个布局的输出规范原文 + 「只输出JSON，不要其他文字」\n\n返回严格的 JSON（不要带注释）：\n{\n  \"name\": \"应用名称（2-6字）\",\n  \"description\": \"20-50字的功能说明\",\n  \"analysis_prompt\": \"自包含的完整提示词\",\n  \"result_layout\": \"cards|list|mixed|timeline|mindmap|wordcloud|line|calendar|report\"\n}\n\n只输出 JSON，不要其他文字。",
         $description,
         0.7,
         2048
@@ -533,6 +534,31 @@ $router->post('/api/insights/run/{id}', function($id) {
 
     $analysis['_layout'] = $config['result_layout'] ?? 'mixed';
     json_response($analysis);
+});
+
+$router->post('/api/insights/run/{id}/follow-up', function($id) {
+    require_login();
+    $app = json_read(DATA_DIR . '/insights_apps/' . $id . '.json');
+    if (!$app) json_response(['error' => '应用不存在'], 404);
+
+    $config = $app['analysis_config'] ?? [];
+    $original_prompt = $config['prompt'] ?? '';
+
+    $data = body_json();
+    $question = trim($data['question'] ?? '');
+    $prev_result = $data['prev_result'] ?? '';
+    $scope_label = $data['scope_label'] ?? '所有文章';
+
+    if (empty($question)) json_response(['error' => '请输入追问内容'], 400);
+
+    $system = "你正在与用户进行关于日记分析的深入对话。之前你用以下视角分析过用户的日记：\n\n{$original_prompt}\n\n现在用户对分析结果有进一步的问题，请基于之前的分析上下文回答。你的回答应该温和、有洞察力，引用日记中的具体内容作为支持。如果是开放式问题，可以提出反思性问题帮助用户深入思考。\n\n回答控制在300字以内，使用自然段落，不要JSON格式。";
+
+    $context = "分析范围：{$scope_label}\n\n之前的分析结果摘要：\n{$prev_result}\n\n用户追问：{$question}";
+
+    $result = call_deepseek($system, $context, 0.7, 1024);
+
+    if (isset($result['error'])) json_response($result, 500);
+    json_response(['answer' => $result['text'] ?? '抱歉，我暂时无法回答这个问题，请稍后再试。']);
 });
 
 $router->delete('/api/insights/apps/{id}', function($id) {
