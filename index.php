@@ -587,7 +587,7 @@ $router->post('/api/insights/run/{id}', function($id) {
         }
     }
 
-    $maxPerArticle = $depth === 1 ? 200 : ($depth === 3 ? 800 : 400);
+    $maxPerArticle = $depth === 1 ? 200 : ($depth === 3 ? 0 : 400);
     $catalog = build_article_catalog($articles, $maxPerArticle);
 
     // 构建用户消息，融入关键词/问题
@@ -596,11 +596,37 @@ $router->post('/api/insights/run/{id}', function($id) {
     if ($question) $extra_context .= "用户提出的问题：{$question}\n";
     if ($scope_b && $scope_b !== $scope) $extra_context .= "这是一个对比分析，文章来自两个不同的范围。请关注两者的差异和共性。\n";
     $extra_context .= "分析深度：{$depth}（1=简短, 2=标准, 3=深度）\n";
-    $user_msg = "请分析以下日记：\n\n{$extra_context}\n{$catalog}";
 
     // 深度影响 token 限制
     $max_tokens = $depth === 1 ? 1024 : ($depth === 3 ? 4096 : 2048);
-    $result = call_deepseek($prompt, $user_msg, 0.7, $max_tokens);
+
+    // 深度=3 且内容过多时：分批阅读 + 综合合成
+    if ($depth === 3 && strlen($catalog) > 15000) {
+        $chunk_size = max(1, (int)ceil(count($articles) / (int)ceil(strlen($catalog) / 10000)));
+        $chunks = array_chunk($articles, $chunk_size);
+        $summaries = [];
+
+        foreach ($chunks as $i => $chunk) {
+            $chunk_catalog = build_article_catalog($chunk, 0);
+            $chunk_result = call_deepseek(
+                "你是一个分析助手。请仔细阅读以下日记，提取所有关键信息：事件、情绪、决策、人物、模式、转折点。保留具体日期和原文关键句。用自然段落输出，200-500字。",
+                "请分析以下日记（第 " . ($i+1) . "/" . count($chunks) . " 批）：\n\n{$chunk_catalog}",
+                0.3,
+                2048
+            );
+            if (!isset($chunk_result['error'])) {
+                $summaries[] = $chunk_result['text'];
+            }
+        }
+
+        if (empty($summaries)) json_response(['error' => '分析失败，请稍后重试'], 500);
+
+        $synthesis_input = "以下是从用户所有日记中分批提取的关键信息摘要，请基于这些信息完成分析：\n\n" . implode("\n\n---\n\n", $summaries);
+        $result = call_deepseek($prompt, $synthesis_input, 0.7, $max_tokens);
+    } else {
+        $user_msg = "请分析以下日记：\n\n{$extra_context}\n{$catalog}";
+        $result = call_deepseek($prompt, $user_msg, 0.7, $max_tokens);
+    }
 
     if (isset($result['error'])) json_response($result, 500);
     $analysis = parse_ai_json($result['text'] ?? '');

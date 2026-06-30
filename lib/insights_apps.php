@@ -154,12 +154,15 @@ function resolve_insights_articles(string $scope): array {
 
 function build_article_catalog(array $articles, int $maxPerArticle = 400): string {
     $catalog = '';
+    $no_truncate = ($maxPerArticle <= 0);
     foreach ($articles as $a) {
         $date = substr($a['created_at'] ?? '', 0, 10);
         $content = $a['content'] ?? '';
-        $len = function_exists('mb_strlen') ? mb_strlen($content) : strlen($content);
-        if ($len > $maxPerArticle * 3) {
-            $content = function_exists('mb_substr') ? mb_substr($content, 0, $maxPerArticle * 3) : substr($content, 0, $maxPerArticle * 3);
+        if (!$no_truncate) {
+            $len = function_exists('mb_strlen') ? mb_strlen($content) : strlen($content);
+            if ($len > $maxPerArticle * 3) {
+                $content = function_exists('mb_substr') ? mb_substr($content, 0, $maxPerArticle * 3) : substr($content, 0, $maxPerArticle * 3);
+            }
         }
         $catalog .= "--- {$date} {$a['title']} ---\n{$content}\n\n";
     }
@@ -296,7 +299,7 @@ function build_ai_app_template(array $app): string {
             <span>简</span>
             <input type="range" id="ai-depth-{$app_id}" min="1" max="3" value="2"
                 style="width:60px;accent-color:var(--accent);"
-                title="1=简短 / 2=标准 / 3=深度">
+                title="1=快速概览（节选） / 2=标准分析（节选） / 3=深度阅读（全文，多篇时自动分批）">
             <span>深</span>
         </div>
         HTML;
