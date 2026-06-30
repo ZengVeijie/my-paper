@@ -5,6 +5,7 @@
 
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/ai.php';
 
 // ==================== 文章 CRUD ====================
 
@@ -215,6 +216,49 @@ function handle_article_detail(string $id): void {
     $GLOBALS['page_data'] = ['article' => $article, 'comments' => $comments, 'title' => $article['title'] ?: '无标题'];
 }
 
+function auto_enrich_article(array &$article): void {
+    $content = $article['content'] ?? '';
+    $content_len = function_exists('mb_strlen') ? mb_strlen($content) : strlen($content);
+    // 内容太短不自动生成
+    if ($content_len < 100) return;
+
+    $need_summary = empty(trim($article['summary'] ?? ''));
+    $need_tags = empty($article['tags']) || (is_array($article['tags']) && count($article['tags']) === 0);
+    if (!$need_summary && !$need_tags) return;
+
+    $preview = $content_len > 2000
+        ? ((function_exists('mb_substr') ? mb_substr($content, 0, 2000) : substr($content, 0, 2000)) . '...(内容过长已截断)')
+        : $content;
+
+    $prompt_parts = [];
+    if ($need_summary) $prompt_parts[] = '"summary": "50-150字的内容摘要"';
+    if ($need_tags) $prompt_parts[] = '"tags": ["标签1", "标签2", "标签3"]（2-4个中文标签，使用统一命名风格）';
+    $prompt_fields = implode(",\n    ", $prompt_parts);
+
+    $result = call_deepseek(
+        "你是一个日记编辑助手。请根据文章内容生成元数据。\n\n规则：\n- 摘要应提炼核心事件、情绪或思考，而非简单复述标题\n- 标签应简洁、有区分度，方便日后检索（如：工作、情感、成长、阅读、旅行、反思、家庭、健康）\n\n返回严格JSON（不要注释）：\n{\n    {$prompt_fields}\n}\n\n只输出JSON。",
+        "请为以下文章生成元数据：\n\n标题：{$article['title']}\n\n内容：\n{$preview}",
+        0.4,
+        512
+    );
+
+    if (isset($result['error'])) return;
+
+    // 兼容 JSON 提取
+    $data = json_decode($result['text'] ?? '', true);
+    if (!is_array($data) && preg_match('/\{[\s\S]*\}/', $result['text'] ?? '', $m)) {
+        $data = json_decode($m[0], true);
+    }
+    if (!is_array($data)) return;
+
+    if ($need_summary && !empty($data['summary'])) {
+        $article['summary'] = trim($data['summary']);
+    }
+    if ($need_tags && !empty($data['tags']) && is_array($data['tags'])) {
+        $article['tags'] = $data['tags'];
+    }
+}
+
 function handle_create_article(): void {
     require_login();
     $data = body_json();
@@ -237,6 +281,7 @@ function handle_create_article(): void {
         'created_at' => $now,
         'updated_at' => $now,
     ];
+    auto_enrich_article($article);
     json_write(DATA_DIR . '/articles/' . $id . '.json', $article);
     json_response(attach_author($article), 201);
 }
@@ -257,6 +302,7 @@ function handle_update_article(string $id): void {
         if (isset($data[$key])) $article[$key] = $data[$key];
     }
     $article['updated_at'] = date('c');
+    auto_enrich_article($article);
 
     json_write(DATA_DIR . '/articles/' . $id . '.json', $article);
     json_response(attach_author($article));
