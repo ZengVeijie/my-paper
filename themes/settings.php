@@ -501,8 +501,12 @@ function renderAppRow(app, enabled, enabledIds) {
     var sourceLabel = isBuiltin ? '内置' : (app.source === 'ai' ? 'AI 生成' : '自定义');
     if (isPublic && !isMine) sourceLabel = '共享';
 
+    var dragAttrs = '';
+    var dragHandle = '';
     var sortBtns = '';
     if (enabled) {
+        dragAttrs = ' draggable="true" ondragstart="appDragStart(event,\'' + app.id + '\',' + idx + ')" ondragover="appDragOver(event)" ondragleave="appDragLeave(event)" ondrop="appDrop(event,\'' + app.id + '\')" ondragend="appDragEnd(event)"';
+        dragHandle = '<span class="drag-handle" style="cursor:grab;color:var(--text-muted);font-size:1rem;line-height:1;user-select:none;flex-shrink:0;" title="拖动排序">⋮⋮</span>';
         sortBtns =
             '<button class="btn-text" onclick="moveApp(\'' + app.id + '\', -1)" ' + (idx === 0 ? 'disabled' : '') + ' style="font-size:0.65rem;padding:0 2px;" title="上移">▲</button>' +
             '<button class="btn-text" onclick="moveApp(\'' + app.id + '\', 1)" ' + (idx === enabledIds.length - 1 ? 'disabled' : '') + ' style="font-size:0.65rem;padding:0 2px;" title="下移">▼</button>';
@@ -515,8 +519,8 @@ function renderAppRow(app, enabled, enabledIds) {
             (isPublic ? '取消共享' : '发布共享') + '</button>';
     }
 
-    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border-light);gap:10px;">' +
-        '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">' + sortBtns + '</div>' +
+    return '<div class="app-row' + (enabled ? ' app-row-enabled' : '') + '" style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border-light);gap:10px;transition:opacity 0.15s,background 0.15s;" ' + dragAttrs + '>' +
+        '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">' + dragHandle + sortBtns + '</div>' +
         '<div style="min-width:0;flex:1;">' +
             '<div style="font-weight:500;font-size:0.85rem;">' + esc(app.name) +
                 (isPublic && !isMine ? ' <span style="font-size:0.65rem;color:var(--text-muted);">@' + esc(app.user_name || '未知') + '</span>' : '') +
@@ -584,6 +588,68 @@ async function moveApp(id, direction) {
     if (newIdx < 0 || newIdx >= ids.length) return;
     ids.splice(idx, 1);
     ids.splice(newIdx, 0, id);
+
+    try {
+        var resp = await fetch('/api/insights/apps/reorder', {
+            method: 'PUT',
+            headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+            body: JSON.stringify({ids: ids})
+        });
+        var r = await resp.json();
+        if (r.ok) {
+            userAppIds = ids;
+            renderAppList();
+        } else {
+            alert(r.error || '排序失败');
+        }
+    } catch(e) { alert('排序失败'); }
+}
+
+// ===== 拖拽排序 =====
+var appDragId = null;
+
+function appDragStart(ev, id, idx) {
+    appDragId = id;
+    ev.dataTransfer.effectAllowed = 'move';
+    ev.dataTransfer.setData('text/plain', id);
+    ev.currentTarget.classList.add('dragging');
+    setTimeout(function() { ev.currentTarget.style.opacity = '0.35'; }, 0);
+}
+
+function appDragOver(ev) {
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = 'move';
+    ev.currentTarget.classList.add('drag-over');
+}
+
+function appDragLeave(ev) {
+    ev.currentTarget.classList.remove('drag-over');
+}
+
+function appDragEnd(ev) {
+    ev.currentTarget.classList.remove('dragging');
+    ev.currentTarget.style.opacity = '';
+    document.querySelectorAll('.app-row.drag-over').forEach(function(el) { el.classList.remove('drag-over'); });
+}
+
+async function appDrop(ev, targetId) {
+    ev.preventDefault();
+    ev.currentTarget.classList.remove('drag-over');
+    ev.currentTarget.style.opacity = '';
+
+    if (!appDragId || appDragId === targetId) return;
+
+    var ids = userAppIds.slice();
+    var fromIdx = ids.indexOf(appDragId);
+    if (fromIdx < 0) return;
+
+    // 移除拖拽项
+    ids.splice(fromIdx, 1);
+    // 找到目标位置（移除后目标索引可能变化）
+    var toIdx = ids.indexOf(targetId);
+    if (toIdx < 0) return;
+    // 插入到目标位置
+    ids.splice(toIdx, 0, appDragId);
 
     try {
         var resp = await fetch('/api/insights/apps/reorder', {

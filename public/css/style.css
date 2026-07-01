@@ -216,6 +216,11 @@ body.sidebar-open .menu-toggle {
 .btn-text:hover { color: var(--accent); }
 .btn-text.btn-danger:hover { color: var(--danger); }
 
+/* 拖拽排序 */
+.app-row-enabled.dragging { opacity: 0.35; }
+.app-row-enabled.drag-over { background: var(--bg-hover, rgba(0,0,0,0.04)); border-top: 2px solid var(--accent); }
+.drag-handle:hover { color: var(--accent); }
+
 /* ===== 表单 ===== */
 
 .field {
