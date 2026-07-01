@@ -863,6 +863,8 @@ async function generateApp() {
 
 var CONSOLE_INPUT_TYPES = [
     { value: 'scope', label: '文章范围', desc: '下拉选择所有文章或合辑' },
+    { value: 'article_picker', label: '指定文章', desc: '多选若干篇文章聚焦分析' },
+    { value: 'tag_filter', label: '标签筛选', desc: '按标签关键词筛选文章' },
     { value: 'keyword', label: '关键词', desc: '输入关键词或主题' },
     { value: 'question', label: '开放问题', desc: '输入想探索的问题' },
     { value: 'date_range', label: '日期范围', desc: '起止日期选择' },

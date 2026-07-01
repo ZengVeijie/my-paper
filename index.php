@@ -585,6 +585,8 @@ $router->post('/api/insights/apps/generate', function() {
 ### input_type（输入控件类型，可以是单个字符串或数组）
 支持多个控件共存，例如 ["scope", "keyword"] 会同时显示文章范围选择器和关键词输入框。
 - scope: 文章范围选择器（下拉选"所有文章"或某个合辑）。适用于大多数分析类应用。
+- article_picker: 多选文章列表。可多选若干篇具体文章聚焦分析。适用于深度分析特定文章。
+- tag_filter: 标签输入框（逗号分隔，带自动补全）。适用于按主题/标签筛选文章范围的分析。
 - keyword: 关键词输入框。适用于主题搜索、关键词分析等需要用户输入主题的应用。
 - question: 开放式问题输入框。适用于问答式探索、自省引导等对话式应用。
 - date_range: 起止日期选择器。适用于时间范围分析、周期性回顾等时间敏感应用。
@@ -606,7 +608,7 @@ $router->post('/api/insights/apps/generate', function() {
 EOS;
 
     $result = call_deepseek(
-        "你是一个应用分析专家。用户描述了一个洞见分析需求，你需要生成应用元数据和给 AI 的分析提示词。\n\n## 核心规则（极其重要）\n\n你的 analysis_prompt 将被直接传给 DeepSeek 执行分析。因此**analysis_prompt 必须是自包含的完整提示词**：\n1. 在 analysis_prompt 开头写清楚分析视角和方法\n2. **在 analysis_prompt 末尾，必须把下面「对应布局的输出 JSON 格式规范」原样粘贴进去**\n3. 末尾务必加上「只输出JSON，不要其他文字」\n\n## 可用布局及输出规范（选择其一，将其规范嵌入 analysis_prompt）\n\n{$specs_text}\n\n{$template_opts_spec}\n\n## 常用分析领域参考\n- 自我剖析：识别个人模式、盲区、价值观、成长轨迹（推荐 cards/mixed/mindmap）\n- 趋势分析：发现情绪、行为、关注点的变化趋势（推荐 line/mixed/calendar）\n- 节点总结：提炼关键转折点、里程碑事件和重要决定（推荐 timeline/report/mixed）\n- 报告生成：综合多维度分析和可视化，生成结构化报告（推荐 report/mixed）\n\n根据用户需求「{$description}」：\n1. 参考上述分析领域，从布局中选择最合适的一个\n2. 编写 analysis_prompt = 分析方法说明 + 你选中的那个布局的输出规范原文 + 「只输出JSON，不要其他文字」\n3. 根据应用特点选择 template_opts（input_type 可以是字符串或数组如 [scope, keyword]，让多个控件共存 + features + style），让交互体验贴合功能\n\n返回严格的 JSON（不要带注释）：\n{\n  \"name\": \"应用名称（2-6字）\",\n  \"description\": \"20-50字的功能说明\",\n  \"analysis_prompt\": \"自包含的完整提示词\",\n  \"result_layout\": \"cards|list|mixed|timeline|mindmap|wordcloud|line|calendar|report\",\n  \"template_opts\": {\n    \"input_type\": \"scope|keyword|question|date_range|none（或数组如 [scope, keyword]）\",\n    \"features\": [\"surprise\"],\n    \"style\": \"default|minimal|explorer\"\n  }\n}\n\n只输出 JSON，不要其他文字。",
+        "你是一个应用分析专家。用户描述了一个洞见分析需求，你需要生成应用元数据和给 AI 的分析提示词。\n\n## 核心规则（极其重要）\n\n你的 analysis_prompt 将被直接传给 DeepSeek 执行分析。因此**analysis_prompt 必须是自包含的完整提示词**：\n1. 在 analysis_prompt 开头写清楚分析视角和方法\n2. **在 analysis_prompt 末尾，必须把下面「对应布局的输出 JSON 格式规范」原样粘贴进去**\n3. 末尾务必加上「只输出JSON，不要其他文字」\n\n## 可用布局及输出规范（选择其一，将其规范嵌入 analysis_prompt）\n\n{$specs_text}\n\n{$template_opts_spec}\n\n## 常用分析领域参考\n- 自我剖析：识别个人模式、盲区、价值观、成长轨迹（推荐 cards/mixed/mindmap）\n- 趋势分析：发现情绪、行为、关注点的变化趋势（推荐 line/mixed/calendar）\n- 节点总结：提炼关键转折点、里程碑事件和重要决定（推荐 timeline/report/mixed）\n- 报告生成：综合多维度分析和可视化，生成结构化报告（推荐 report/mixed）\n\n根据用户需求「{$description}」：\n1. 参考上述分析领域，从布局中选择最合适的一个\n2. 编写 analysis_prompt = 分析方法说明 + 你选中的那个布局的输出规范原文 + 「只输出JSON，不要其他文字」\n3. 根据应用特点选择 template_opts（input_type 可以是字符串或数组如 [scope, keyword]，可用值: scope/article_picker/tag_filter/keyword/question/date_range/none，让多个控件共存 + features + style），让交互体验贴合功能\n\n返回严格的 JSON（不要带注释）：\n{\n  \"name\": \"应用名称（2-6字）\",\n  \"description\": \"20-50字的功能说明\",\n  \"analysis_prompt\": \"自包含的完整提示词\",\n  \"result_layout\": \"cards|list|mixed|timeline|mindmap|wordcloud|line|calendar|report\",\n  \"template_opts\": {\n    \"input_type\": \"scope|article_picker|tag_filter|keyword|question|date_range|none（或数组如 [scope, keyword]）\",\n    \"features\": [\"surprise\"],\n    \"style\": \"default|minimal|explorer\"\n  }\n}\n\n只输出 JSON，不要其他文字。",
         $description,
         0.7,
         2048
@@ -661,7 +663,7 @@ $router->post('/api/insights/apps', function() {
     $features = $opts['features'] ?? [];
     $style = $opts['style'] ?? 'default';
 
-    $valid_types = ['scope', 'keyword', 'question', 'date_range', 'none'];
+    $valid_types = ['scope', 'article_picker', 'tag_filter', 'keyword', 'question', 'date_range', 'none'];
     if (is_array($input_type)) {
         foreach ($input_type as $t) {
             if (!in_array($t, $valid_types, true)) json_response(['error' => '无效的输入控件类型: ' . h($t)], 400);

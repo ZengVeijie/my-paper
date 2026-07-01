@@ -140,7 +140,19 @@ function resolve_insights_articles(string $scope): array {
     $user = current_user();
     $articles = json_list(DATA_DIR . '/articles');
 
-    if (str_starts_with($scope, 'collection:')) {
+    if (str_starts_with($scope, 'article:')) {
+        $ids = explode(',', substr($scope, 8));
+        $ids = array_map('trim', $ids);
+        $articles = array_filter($articles, fn($a) => in_array($a['id'], $ids, true));
+    } elseif (str_starts_with($scope, 'tag:')) {
+        $tags = explode(',', substr($scope, 4));
+        $tags = array_map('trim', $tags);
+        $tags = array_filter($tags, fn($t) => $t !== '');
+        $articles = array_filter($articles, function($a) use ($tags) {
+            $article_tags = $a['tags'] ?? [];
+            return !empty(array_intersect($article_tags, $tags));
+        });
+    } elseif (str_starts_with($scope, 'collection:')) {
         $coll_id = substr($scope, 11);
         $coll = json_read(DATA_DIR . '/collections/' . $coll_id . '.json');
         if (!$coll) return [];
@@ -283,6 +295,42 @@ function build_ai_app_template(array $app): string {
                     <option value=\"all\">所有文章</option>
                     {$scope_opts}
                 </select>";
+                break;
+
+            case 'article_picker':
+                $user_articles = resolve_insights_articles('all');
+                $art_opts = '';
+                foreach ($user_articles as $art) {
+                    $art_date = substr($art['created_at'] ?? '', 0, 10);
+                    $art_title = htmlspecialchars($art['title'] ?: '无标题', ENT_QUOTES, 'UTF-8');
+                    $art_id = htmlspecialchars($art['id'], ENT_QUOTES, 'UTF-8');
+                    $art_opts .= "<option value=\"{$art_id}\">{$art_date} {$art_title}</option>";
+                }
+                $w = "<select id=\"ai-article-{$app_id}\" multiple size=\"5\" class=\"ai-picker\"
+                    style=\"flex:1;min-width:200px;\"
+                    title=\"可多选（Ctrl+点击），不选则分析全部\">{$art_opts}</select>";
+                break;
+
+            case 'tag_filter':
+                $tag_ph = htmlspecialchars($opts['placeholder'] ?? '输入标签，逗号分隔，如：工作, 心情', ENT_QUOTES, 'UTF-8');
+                $all_tags = [];
+                foreach (resolve_insights_articles('all') as $art) {
+                    foreach ($art['tags'] ?? [] as $t) $all_tags[] = $t;
+                }
+                $all_tags = array_unique($all_tags);
+                sort($all_tags);
+                $dl_id = 'ai-tags-dl-' . $app_id;
+                $dl_html = '';
+                if (!empty($all_tags)) {
+                    $dl_html = "<datalist id=\"{$dl_id}\">";
+                    foreach ($all_tags as $t) {
+                        $dl_html .= '<option value="' . htmlspecialchars($t, ENT_QUOTES, 'UTF-8') . '">';
+                    }
+                    $dl_html .= '</datalist>';
+                }
+                $w = "<input type=\"text\" id=\"ai-tags-{$app_id}\" list=\"{$dl_id}\" placeholder=\"{$tag_ph}\"
+                    style=\"flex:1;min-width:160px;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-ui);font-size:0.82rem;\"
+                    onkeydown=\"if(event.key==='Enter')runInsightsApp('{$app_id}')\">{$dl_html}";
                 break;
 
             case 'none':

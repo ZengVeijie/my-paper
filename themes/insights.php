@@ -1866,8 +1866,22 @@ async function runInsightsApp(appId, mode) {
     var dateStartEl = document.getElementById('ai-date-start-' + appId);
     var dateEndEl = document.getElementById('ai-date-end-' + appId);
     var depthEl = document.getElementById('ai-depth-' + appId);
+    var articleEl = document.getElementById('ai-article-' + appId);
+    var tagsEl = document.getElementById('ai-tags-' + appId);
 
     body.scope = scopeEl ? scopeEl.value : (scopeAEl ? scopeAEl.value : 'all');
+    // 指定文章选择器：多选值覆盖 scope
+    if (articleEl && articleEl.selectedOptions && articleEl.selectedOptions.length > 0) {
+        var ids = [];
+        for (var i = 0; i < articleEl.selectedOptions.length; i++) {
+            ids.push(articleEl.selectedOptions[i].value);
+        }
+        body.scope = 'article:' + ids.join(',');
+    }
+    // 标签筛选：输入值覆盖 scope
+    if (tagsEl && tagsEl.value.trim()) {
+        body.scope = 'tag:' + tagsEl.value.trim();
+    }
     if (mode) body.mode = mode;
     if (keywordEl && keywordEl.value.trim()) body.keyword = keywordEl.value.trim();
     if (questionEl && questionEl.value.trim()) body.question = questionEl.value.trim();
@@ -1902,7 +1916,11 @@ async function runInsightsApp(appId, mode) {
 
         // 确定范围标签（用于追问上下文）
         var scopeLabel = '所有文章';
-        if (scopeEl && scopeEl.selectedOptions) scopeLabel = scopeEl.selectedOptions[0].text;
+        if (articleEl && articleEl.selectedOptions && articleEl.selectedOptions.length > 0) {
+            scopeLabel = '已选 ' + articleEl.selectedOptions.length + ' 篇文章';
+        } else if (tagsEl && tagsEl.value.trim()) {
+            scopeLabel = '标签: ' + tagsEl.value.trim();
+        } else if (scopeEl && scopeEl.selectedOptions) scopeLabel = scopeEl.selectedOptions[0].text;
         else if (scopeAEl && scopeAEl.selectedOptions) scopeLabel = scopeAEl.selectedOptions[0].text;
         else if (keywordEl && keywordEl.value.trim()) scopeLabel = '关键词: ' + keywordEl.value.trim();
         else if (questionEl && questionEl.value.trim()) scopeLabel = '问题: ' + questionEl.value.trim();
