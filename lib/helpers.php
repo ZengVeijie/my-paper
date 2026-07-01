@@ -27,8 +27,13 @@ function json_read(string $path): ?array {
 
 function json_write(string $path, array $data): bool {
     $dir = dirname($path);
-    if (!is_dir($dir)) mkdir($dir, 0755, true);
-    return file_put_contents($path, json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), LOCK_EX) !== false;
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0755, true);
+        if (!is_dir($dir)) return false;
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    if ($json === false) return false;
+    return @file_put_contents($path, $json, LOCK_EX) !== false;
 }
 
 function json_delete(string $path): bool {

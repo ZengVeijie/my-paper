@@ -645,8 +645,10 @@ EOS;
     $app_def['template'] = build_ai_app_template($app_def);
 
     $dir = DATA_DIR . '/insights_apps';
-    if (!is_dir($dir)) mkdir($dir, 0755, true);
-    json_write($dir . '/' . $id . '.json', $app_def);
+    if (!is_dir($dir)) @mkdir($dir, 0755, true);
+    if (!json_write($dir . '/' . $id . '.json', $app_def)) {
+        json_response(['error' => '保存应用失败，请检查 data/insights_apps/ 目录权限'], 500);
+    }
 
     json_response($app_def, 201);
 });
@@ -714,8 +716,10 @@ $router->post('/api/insights/apps', function() {
     $app_def['template'] = build_ai_app_template($app_def);
 
     $dir = DATA_DIR . '/insights_apps';
-    if (!is_dir($dir)) mkdir($dir, 0755, true);
-    json_write($dir . '/' . $id . '.json', $app_def);
+    if (!is_dir($dir)) @mkdir($dir, 0755, true);
+    if (!json_write($dir . '/' . $id . '.json', $app_def)) {
+        json_response(['error' => '保存应用失败，请检查 data/insights_apps/ 目录权限'], 500);
+    }
 
     json_response($app_def, 201);
 });
