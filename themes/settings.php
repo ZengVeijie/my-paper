@@ -261,6 +261,16 @@
 
 <script>
 let sharesLoaded = false, templatesLoaded = false, appsLoaded = false;
+// 从浏览器缓存（BFCache）恢复时重置加载标记，确保重新拉取数据
+window.addEventListener('pageshow', function(e) {
+    if (e.persisted) {
+        sharesLoaded = false;
+        templatesLoaded = false;
+        appsLoaded = false;
+        var hash = window.location.hash.slice(1);
+        if (hash === 'apps') loadApps();
+    }
+});
 (function() {
     var hash = window.location.hash.slice(1);
     if (hash === 'apps') {
@@ -515,12 +525,25 @@ function setAppFilter(filter, btn, ev) {
 }
 
 async function loadApps() {
+    var el = document.getElementById('apps-list');
     try {
         var resp = await fetch('/api/insights/apps', {headers:{'X-Requested-With':'XMLHttpRequest'}});
-        allApps = await resp.json();
+        if (!resp.ok) {
+            el.innerHTML = '<p style="color:var(--danger);font-size:0.85rem;">加载失败（HTTP ' + resp.status + '），请刷新页面重试</p>';
+            return;
+        }
+        var data = await resp.json();
+        if (!Array.isArray(data)) {
+            el.innerHTML = '<p style="color:var(--danger);font-size:0.85rem;">数据格式异常，请刷新页面重试</p>';
+            return;
+        }
+        allApps = data;
         userAppIds = <?= json_encode($user_insights_apps ?? [], JSON_UNESCAPED_UNICODE) ?>;
         renderAppList();
-    } catch(e) { console.error(e); }
+    } catch(e) {
+        console.error(e);
+        el.innerHTML = '<p style="color:var(--danger);font-size:0.85rem;">网络异常，请检查连接后<a href="javascript:location.reload()" style="color:var(--accent);">刷新页面</a></p>';
+    }
 }
 
 function renderAppList() {
