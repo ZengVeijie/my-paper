@@ -863,6 +863,61 @@ $router->post('/api/insights/blindspot', function() {
     json_response($analysis ?: ['error' => '分析失败，请稍后重试'], $analysis ? 200 : 500);
 });
 
+// ===== 回响追问 =====
+$router->post('/api/insights/echo', function() {
+    require_login();
+    $data = body_json();
+    $scope = $data['scope'] ?? 'all';
+    $articles = resolve_insights_articles($scope);
+    if (empty($articles)) json_response(['error' => '没有可分析的文章'], 400);
+    $catalog = build_article_catalog($articles, 300);
+
+    $result = call_deepseek(
+        "你是一个温柔而敏锐的写作陪伴者。你的任务是通读用户的日记，找到那些「被一带而过但值得追问」的话题。\n\n什么是好话题？\n1. 用户曾提到某个挑战、困难或决定，但没有后续交代\n2. 用户一笔带过却暗含情绪的事件（如\"今天有点不开心但不想多说\"）\n3. 用户曾立下的目标、计划或承诺，后续日记中再未提及\n4. 反复出现的隐约模式——某个名字、某类场景、某种情绪\n\n你需要做的事：\n1. 引用原文中具体的那一两句话\n2. 用友善、好奇、不带压力的语气问一个问题\n3. 解释为什么你觉得这个话题值得重新提起\n\n返回严格JSON（不要注释）：\n{\n  \"question\": \"温暖而具体的追问（30-80字，语气像朋友关心）\",\n  \"context\": {\n    \"date\": \"原文日期 YYYY-MM-DD\",\n    \"title\": \"原文标题\",\n    \"quote\": \"直接引用的原句（15-50字）\",\n    \"article_id\": \"原文ID\"\n  },\n  \"why\": \"一句话解释为什么挑这个话题（10-20字）\"\n}\n\n只输出JSON。",
+        "请通读以下日记，找到一个可追问的话题：\n\n{$catalog}",
+        0.8,
+        1024
+    );
+
+    if (isset($result['error'])) json_response($result, 500);
+    $analysis = parse_ai_json($result['text'] ?? '');
+    json_response($analysis ?: ['error' => '未能找到合适的话题，请稍后再试'], $analysis ? 200 : 500);
+});
+
+$router->post('/api/insights/echo/draft', function() {
+    require_login();
+    $data = body_json();
+    $question = trim($data['question'] ?? '');
+    $answer = trim($data['answer'] ?? '');
+    $context = $data['context'] ?? [];
+    if (empty($answer)) json_response(['error' => '请先写下你的回答'], 400);
+
+    $ctx_text = '';
+    if (!empty($context['date'])) $ctx_text .= "原文日期：{$context['date']}\n";
+    if (!empty($context['title'])) $ctx_text .= "原标题：{$context['title']}\n";
+    if (!empty($context['quote'])) $ctx_text .= "原文引用：{$context['quote']}\n";
+
+    $result = call_deepseek(
+        "你是一个日记编辑助手。用户回答了一个关于过往经历的追问，请将回答整理为一篇自然、真诚的日记。\n\n规则：\n1. 使用第一人称（\"我\"），保持用户的口吻和风格\n2. 开头自然承接到原始话题，不要生硬的\"关于...我的回答是...\"\n3. 可以加入适当的反思和情感表达\n4. 标题简洁有力（2-10字），不要带书名号\n5. 内容控制在200-500字\n6. 标签2-3个，中文\n\n返回严格JSON：\n{\n  \"title\": \"日记标题\",\n  \"content\": \"日记正文\",\n  \"tags\": [\"标签1\", \"标签2\"]\n}\n\n只输出JSON。",
+        "追问：{$question}\n\n用户的回答：{$answer}\n\n原始上下文：\n{$ctx_text}",
+        0.7,
+        1024
+    );
+
+    if (isset($result['error'])) json_response($result, 500);
+    $draft = parse_ai_json($result['text'] ?? '');
+    if (!$draft || empty($draft['content'])) {
+        // 降级：直接用用户回答作为内容
+        json_response([
+            'title' => '回响·' . date('m-d'),
+            'content' => $answer,
+            'tags' => ['回响', '反思'],
+        ]);
+        return;
+    }
+    json_response($draft);
+});
+
 // ==================== 启动 ====================
 
 $method = $_SERVER['REQUEST_METHOD'];

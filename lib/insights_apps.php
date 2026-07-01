@@ -74,6 +74,14 @@ function get_builtin_insights_apps(): array {
             'source' => 'builtin',
             'render_type' => 'php',
         ],
+        [
+            'id' => 'echo',
+            'name' => '回响追问',
+            'description' => 'AI 找到你曾经一带而过的挑战或心事，温柔追问近况，帮你写成新日记',
+            'icon' => '',
+            'source' => 'builtin',
+            'render_type' => 'php',
+        ],
     ];
 }
 

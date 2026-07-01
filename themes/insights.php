@@ -150,6 +150,95 @@ foreach ($collections as $c) {
         </div>
         <div id="blindspot-result"></div>
     </section>
+<?php elseif ($app_id === 'echo'): ?>
+    <div class="echo-app">
+        <div class="echo-header">
+            <h2>回响追问</h2>
+            <p class="section-desc">让 AI 找到你日记中那些被遗忘的话题，温柔地问你一句"后来呢？"</p>
+        </div>
+
+        <!-- 初始态：选范围 + 找话题 -->
+        <div id="echo-start" class="echo-start-card">
+            <div class="echo-illustration">
+                <svg width="64" height="64" viewBox="0 0 64 64" fill="none"><circle cx="32" cy="32" r="30" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.5"/><circle cx="32" cy="32" r="8" fill="var(--accent)" opacity="0.15"/><circle cx="32" cy="32" r="4" fill="var(--accent)" opacity="0.4"/></svg>
+            </div>
+            <p style="color:var(--text-secondary);font-size:0.9rem;text-align:center;max-width:320px;margin:0 auto 16px;">我会在你的日记里寻找那些曾经提起、但后来再没出现的挑战或心事——然后轻轻地追问你</p>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;">
+                <select id="echo-scope" style="flex:1;min-width:160px;max-width:260px;padding:8px 12px;border:1px solid var(--border);border-radius:20px;background:var(--bg-card);font-family:var(--font-ui);font-size:0.85rem;">
+                    <?php foreach ($scope_options as $opt): ?>
+                    <option value="<?= h($opt['value']) ?>"><?= h($opt['label']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <button class="echo-find-btn" onclick="echoFindTopic()">找一个话题</button>
+            </div>
+        </div>
+
+        <!-- 加载态 -->
+        <div id="echo-loading" class="echo-card" style="display:none;">
+            <div class="echo-loading-dots"><span></span><span></span><span></span></div>
+            <p style="color:var(--text-muted);font-size:0.85rem;">正在翻阅你的日记...</p>
+        </div>
+
+        <!-- 话题卡片 -->
+        <div id="echo-question-card" class="echo-card" style="display:none;">
+            <div class="echo-context">
+                <span class="echo-context-date" id="echo-ctx-date"></span>
+                <span class="echo-context-title" id="echo-ctx-title"></span>
+            </div>
+            <blockquote class="echo-quote" id="echo-ctx-quote"></blockquote>
+            <p class="echo-why" id="echo-why"></p>
+            <div class="echo-question-box">
+                <span class="echo-question-mark">?</span>
+                <p class="echo-question-text" id="echo-question"></p>
+            </div>
+
+            <div id="echo-answer-area" style="margin-top:20px;">
+                <textarea id="echo-answer" class="echo-textarea" placeholder="写下你的近况...&#10;&#10;不用想太多，就像和朋友聊天一样——&#10;这件事后来怎么样了？你现在怎么想的？"
+                    oninput="echoUpdateDraftBtn()"></textarea>
+                <div class="echo-actions">
+                    <button class="echo-skip-btn" onclick="echoFindTopic()">换一个话题</button>
+                    <button class="echo-draft-btn" id="echo-draft-btn" disabled onclick="echoGenerateDraft()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                        生成日记草稿
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 草稿预览 -->
+        <div id="echo-draft-card" class="echo-card echo-draft-card" style="display:none;">
+            <div class="echo-draft-header">
+                <span style="font-size:0.75rem;color:var(--text-muted);font-family:var(--font-ui);">AI 根据你的回答生成了日记草稿</span>
+            </div>
+            <h3 id="echo-draft-title" class="echo-draft-title"></h3>
+            <div id="echo-draft-content" class="echo-draft-content"></div>
+            <div class="echo-draft-tags" id="echo-draft-tags"></div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:16px;">
+                <input type="text" id="echo-draft-title-edit" class="echo-draft-title-input" placeholder="修改标题...">
+                <textarea id="echo-draft-content-edit" class="echo-textarea" style="min-height:120px;" placeholder="修改内容..."></textarea>
+                <div class="echo-actions" style="margin-top:0;">
+                    <button class="echo-skip-btn" onclick="echoReset()">重新开始</button>
+                    <button class="btn btn-primary btn-sm" onclick="echoSaveArticle()">保存为日记</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 保存成功 -->
+        <div id="echo-done" class="echo-card echo-done-card" style="display:none;">
+            <div class="echo-done-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-5"/></svg>
+            </div>
+            <p style="font-weight:600;color:var(--text);">已保存为日记</p>
+            <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px;">日子又添了一页。要继续追问吗？</p>
+            <div style="display:flex;gap:8px;">
+                <button class="echo-find-btn" onclick="echoFindTopic()">再找一个话题</button>
+                <a class="btn btn-sm" href="/write">写新日记</a>
+            </div>
+        </div>
+
+        <!-- 错误 -->
+        <div id="echo-error" style="display:none;color:var(--danger);text-align:center;padding:16px;"></div>
+    </div>
 <?php endif; ?>
 <?php else: ?>
     <?= build_ai_app_template($app) ?>
@@ -390,6 +479,97 @@ foreach ($collections as $c) {
     color:var(--text-secondary);
 }
 .blindspot-card .bs-suggestion { font-size:0.85rem; line-height:1.7; }
+
+/* ===== 回响追问 ===== */
+.echo-app { max-width:640px;margin:0 auto; }
+.echo-header { text-align:center;margin-bottom:24px; }
+.echo-header h2 { font-size:1.5rem;letter-spacing:-0.01em; }
+.echo-start-card { text-align:center;padding:40px 24px;background:var(--bg-card);border:1px solid var(--border);border-radius:16px; }
+.echo-illustration { margin-bottom:16px; }
+.echo-find-btn {
+    padding:9px 24px;border-radius:24px;font-size:0.85rem;font-family:var(--font-ui);
+    background:var(--accent);color:#fff;border:none;cursor:pointer;font-weight:500;
+    transition: all 0.2s;white-space:nowrap;
+}
+.echo-find-btn:hover { filter:brightness(1.1);transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,0.1); }
+
+.echo-card {
+    background:var(--bg-card);border:1px solid var(--border);border-radius:16px;
+    padding:28px 24px;animation: fadeSlideIn 0.5s ease;
+}
+.echo-loading-dots { text-align:center;margin-bottom:12px; }
+.echo-loading-dots span {
+    display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);
+    margin:0 4px;animation: echoDot 1.4s infinite ease-in-out both;
+}
+.echo-loading-dots span:nth-child(1) { animation-delay:-0.32s; }
+.echo-loading-dots span:nth-child(2) { animation-delay:-0.16s; }
+@keyframes echoDot { 0%,80%,100%{transform:scale(0.5);opacity:0.4;} 40%{transform:scale(1);opacity:1;} }
+
+.echo-context { display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap; }
+.echo-context-date { font-size:0.75rem;color:var(--text-muted);font-family:var(--font-ui); }
+.echo-context-title { font-size:0.8rem;color:var(--text);font-weight:500; }
+.echo-context-title::before { content:'《'; }
+.echo-context-title::after { content:'》'; }
+
+.echo-quote {
+    margin:0 0 12px;padding:12px 16px;background:linear-gradient(135deg,var(--bg) 0%,#fdf6f0 100%);
+    border-left:3px solid var(--accent);border-radius:0 8px 8px 0;font-size:0.88rem;line-height:1.7;
+    color:var(--text-secondary);font-style:italic;
+}
+
+.echo-why { font-size:0.78rem;color:var(--text-muted);margin-bottom:16px;font-family:var(--font-ui); }
+
+.echo-question-box {
+    display:flex;gap:12px;align-items:flex-start;padding:16px;background:var(--accent-light);
+    border-radius:12px;
+}
+.echo-question-mark {
+    flex-shrink:0;width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:600;
+}
+.echo-question-text { font-size:1rem;line-height:1.7;color:var(--text);margin:0; }
+
+.echo-textarea {
+    width:100%;min-height:140px;padding:14px;border:1px solid var(--border);border-radius:12px;
+    background:var(--bg);font-family:var(--font);font-size:0.9rem;line-height:1.8;
+    resize:vertical;transition:border-color 0.2s;box-sizing:border-box;
+}
+.echo-textarea:focus { outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(var(--accent-rgb,102,126,234),0.1); }
+
+.echo-actions { display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;justify-content:flex-end; }
+.echo-skip-btn {
+    padding:8px 16px;border-radius:20px;font-size:0.8rem;font-family:var(--font-ui);
+    background:transparent;border:1px solid var(--border);color:var(--text-muted);cursor:pointer;
+    transition:all 0.2s;
+}
+.echo-skip-btn:hover { border-color:var(--text-muted);color:var(--text); }
+.echo-draft-btn {
+    padding:9px 20px;border-radius:20px;font-size:0.85rem;font-family:var(--font-ui);
+    background:var(--accent);color:#fff;border:none;cursor:pointer;font-weight:500;
+    display:flex;align-items:center;gap:6px;transition:all 0.2s;
+}
+.echo-draft-btn:disabled { opacity:0.4;cursor:not-allowed; }
+.echo-draft-btn:not(:disabled):hover { filter:brightness(1.1); }
+
+.echo-draft-card { margin-top:16px; }
+.echo-draft-header { margin-bottom:12px; }
+.echo-draft-title { font-size:1.15rem;margin:0 0 12px;color:var(--text);letter-spacing:0.01em; }
+.echo-draft-content { font-size:0.9rem;line-height:1.9;color:var(--text);white-space:pre-wrap;margin-bottom:12px; }
+.echo-draft-tags { display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px; }
+.echo-draft-tags span {
+    padding:3px 10px;border-radius:12px;background:var(--accent-light);color:var(--accent);
+    font-size:0.72rem;font-family:var(--font-ui);
+}
+.echo-draft-title-input {
+    width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;
+    font-size:0.95rem;font-family:var(--font);box-sizing:border-box;
+}
+.echo-draft-title-input:focus { outline:none;border-color:var(--accent); }
+
+.echo-done-card { text-align:center;padding:40px 24px; }
+.echo-done-icon { margin-bottom:12px;animation: echoPopIn 0.4s cubic-bezier(0.175,0.885,0.32,1.275); }
+@keyframes echoPopIn { from{transform:scale(0);opacity:0;} to{transform:scale(1);opacity:1;} }
 
 .task-group { margin-bottom:20px; }
 .task-group-header {
@@ -1450,6 +1630,123 @@ async function analyzeBlindspot() {
     } catch(e) {
         resultEl.innerHTML = '<p style="color:var(--danger);">请求失败: ' + esc(e.message) + '</p>';
     }
+}
+
+// ===== 9. Echo: 回响追问 =====
+var echoState = {};
+
+function echoSwitchView(showId) {
+    ['echo-start','echo-loading','echo-question-card','echo-draft-card','echo-done'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.style.display = (id === showId) ? '' : 'none';
+    });
+    var errEl = document.getElementById('echo-error');
+    if (errEl) errEl.style.display = 'none';
+}
+
+async function echoFindTopic() {
+    echoSwitchView('echo-loading');
+    echoState = {};
+    var scope = document.getElementById('echo-scope').value;
+    try {
+        var resp = await fetch('/api/insights/echo', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+            body: JSON.stringify({scope: scope})
+        });
+        var r = await resp.json();
+        if (r.error) {
+            document.getElementById('echo-error').style.display = '';
+            document.getElementById('echo-error').textContent = r.error;
+            echoSwitchView('echo-start');
+            return;
+        }
+        echoState = r;
+        // 填充问题卡片
+        if (r.context) {
+            document.getElementById('echo-ctx-date').textContent = r.context.date || '';
+            document.getElementById('echo-ctx-title').textContent = r.context.title || '';
+            document.getElementById('echo-ctx-quote').textContent = '“' + (r.context.quote || '') + '”';
+        }
+        document.getElementById('echo-why').textContent = '话题线索：' + (r.why || '这段往事似乎还没有画上句号');
+        document.getElementById('echo-question').textContent = r.question || '';
+        document.getElementById('echo-answer').value = '';
+        document.getElementById('echo-draft-btn').disabled = true;
+        echoSwitchView('echo-question-card');
+    } catch(e) {
+        document.getElementById('echo-error').style.display = '';
+        document.getElementById('echo-error').textContent = '请求失败: ' + e.message;
+        echoSwitchView('echo-start');
+    }
+}
+
+function echoUpdateDraftBtn() {
+    var btn = document.getElementById('echo-draft-btn');
+    var answer = document.getElementById('echo-answer').value.trim();
+    if (btn) btn.disabled = answer.length < 10;
+}
+
+async function echoGenerateDraft() {
+    var answer = document.getElementById('echo-answer').value.trim();
+    if (answer.length < 10) return;
+
+    document.getElementById('echo-draft-btn').disabled = true;
+    document.getElementById('echo-draft-btn').textContent = '正在生成...';
+
+    try {
+        var resp = await fetch('/api/insights/echo/draft', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+            body: JSON.stringify({
+                question: echoState.question || '',
+                answer: answer,
+                context: echoState.context || {}
+            })
+        });
+        var r = await resp.json();
+        if (r.error) {
+            alert(r.error);
+            document.getElementById('echo-draft-btn').disabled = false;
+            document.getElementById('echo-draft-btn').innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>生成日记草稿';
+            return;
+        }
+
+        echoState.draft = r;
+        // 显示草稿预览
+        document.getElementById('echo-draft-title').textContent = r.title || '';
+        document.getElementById('echo-draft-content').textContent = r.content || '';
+        var tagsHtml = (r.tags || []).map(function(t) { return '<span>' + esc(t) + '</span>'; }).join('');
+        document.getElementById('echo-draft-tags').innerHTML = tagsHtml;
+        document.getElementById('echo-draft-title-edit').value = r.title || '';
+        document.getElementById('echo-draft-content-edit').value = r.content || '';
+        echoSwitchView('echo-draft-card');
+    } catch(e) {
+        alert('生成失败: ' + e.message);
+        document.getElementById('echo-draft-btn').disabled = false;
+        document.getElementById('echo-draft-btn').innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>生成日记草稿';
+    }
+}
+
+async function echoSaveArticle() {
+    var title = document.getElementById('echo-draft-title-edit').value.trim() || echoState.draft.title;
+    var content = document.getElementById('echo-draft-content-edit').value.trim() || echoState.draft.content;
+    var tags = echoState.draft.tags || ['回响'];
+
+    try {
+        var resp = await fetch('/api/articles', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+            body: JSON.stringify({title: title, content: content, tags: tags, visibility: 'private'})
+        });
+        var r = await resp.json();
+        if (r.error) { alert(r.error); return; }
+        echoSwitchView('echo-done');
+    } catch(e) { alert('保存失败: ' + e.message); }
+}
+
+function echoReset() {
+    echoState = {};
+    echoSwitchView('echo-start');
 }
 
 // ===== Follow-up questioning module =====
