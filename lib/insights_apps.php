@@ -306,15 +306,13 @@ function build_ai_app_template(array $app): string {
         HTML;
     }
 
-    // 深度滑块
+    // 深度选择器（三段点击）
     if (in_array('depth_slider', $features)) {
         $features_html .= <<<HTML
-        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;font-size:0.75rem;color:var(--text-muted);">
-            <span>简</span>
-            <input type="range" id="ai-depth-{$app_id}" min="1" max="3" value="2"
-                style="width:60px;accent-color:var(--accent);"
-                title="1=快速概览（节选） / 2=标准分析（节选） / 3=深度阅读（全文，多篇时自动分批）">
-            <span>深</span>
+        <div class="depth-picker" id="ai-depth-{$app_id}" title="1=快速概览 / 2=标准分析 / 3=深度阅读">
+            <span class="depth-opt active" data-d="1" onclick="pickDepth('{$app_id}',this,1)">简</span>
+            <span class="depth-opt" data-d="2" onclick="pickDepth('{$app_id}',this,2)">标</span>
+            <span class="depth-opt" data-d="3" onclick="pickDepth('{$app_id}',this,3)">深</span>
         </div>
         HTML;
     }

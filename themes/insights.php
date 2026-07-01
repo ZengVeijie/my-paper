@@ -668,6 +668,29 @@ foreach ($collections as $c) {
 }
 @keyframes aiSpin { to { transform:rotate(360deg); } }
 
+/* 深度选择器 */
+.depth-picker {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.depth-opt {
+    display: inline-block;
+    padding: 3px 9px;
+    font-size: 0.7rem;
+    cursor: pointer;
+    background: var(--bg-card);
+    color: var(--text-muted);
+    font-family: var(--font-ui);
+    transition: all 0.15s;
+    user-select: none;
+}
+.depth-opt + .depth-opt { border-left: 1px solid var(--border); }
+.depth-opt:not(.active):hover { background: var(--bg-hover, rgba(0,0,0,0.05)); color: var(--text); }
+.depth-opt.active { background: var(--accent); color: #fff; }
+
 /* 模板风格变体 */
 .ai-app-minimal {}
 .ai-app-minimal .ai-controls { margin-bottom:12px; }
@@ -1819,6 +1842,13 @@ function storeFollowUpContext(appId, scopeLabel, resultData) {
     };
 }
 
+// ===== 深度选择 =====
+function pickDepth(appId, el, d) {
+    var picker = document.getElementById('ai-depth-' + appId);
+    picker.querySelectorAll('.depth-opt').forEach(function(o) { o.classList.remove('active'); });
+    el.classList.add('active');
+}
+
 // ===== AI App: Standard runner & result renderer =====
 
 async function runInsightsApp(appId, mode) {
@@ -1843,7 +1873,7 @@ async function runInsightsApp(appId, mode) {
     if (questionEl && questionEl.value.trim()) body.question = questionEl.value.trim();
     if (dateStartEl && dateStartEl.value) body.date_start = dateStartEl.value;
     if (dateEndEl && dateEndEl.value) body.date_end = dateEndEl.value;
-    if (depthEl) body.depth = depthEl.value;
+    if (depthEl) { var active = depthEl.querySelector('.depth-opt.active'); body.depth = active ? active.getAttribute('data-d') : '2'; }
 
     // 对比模式
     var scopeBEl = document.getElementById('ai-scope-b-' + appId);
