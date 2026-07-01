@@ -261,7 +261,14 @@
 
 <script>
 let sharesLoaded = false, templatesLoaded = false, appsLoaded = false;
-// 从浏览器缓存（BFCache）恢复时重置加载标记，确保重新拉取数据
+	// HTML 转义（app.js 在 footer 加载，异步回调可能在 app.js 之前执行，这里提供兜底）
+	var _escEl;
+	function esc(s) {
+	    if (!_escEl) _escEl = document.createElement("div");
+	    _escEl.textContent = s || "";
+	    return _escEl.innerHTML;
+	}
+	// 从浏览器缓存（BFCache）恢复时重置加载标记，确保重新拉取数据
 window.addEventListener('pageshow', function(e) {
     if (e.persisted) {
         sharesLoaded = false;
