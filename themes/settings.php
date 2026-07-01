@@ -158,6 +158,82 @@
         <div id="apps-list" style="margin-bottom:20px;">
             <p style="color:var(--text-muted);font-size:0.85rem;">加载中...</p>
         </div>
+
+        <!-- ===== 应用生成操作台 ===== -->
+        <div class="app-console" id="app-console" style="display:none;">
+            <div class="app-console-toggle" onclick="toggleConsole()">
+                <h3 id="console-title" style="font-size:0.95rem;margin:0;">应用生成操作台</h3>
+                <span style="display:flex;gap:8px;align-items:center;">
+                    <span id="console-chevron">&#9660;</span>
+                </span>
+            </div>
+            <div class="app-console-body" id="console-body">
+                <input type="hidden" id="console-app-id" value="">
+                <input type="hidden" id="console-source" value="custom">
+
+                <div class="app-console-section">
+                    <label class="field"><span>应用名称</span></label>
+                    <input type="text" id="console-name" placeholder="如：情绪波动分析" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-ui);font-size:0.82rem;">
+                </div>
+                <div class="app-console-section">
+                    <label class="field"><span>应用描述</span></label>
+                    <input type="text" id="console-desc" placeholder="简短描述该应用的功能..." style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-ui);font-size:0.82rem;">
+                </div>
+
+                <div class="app-console-section">
+                    <span style="font-weight:500;">输入控件</span>
+                    <span class="field-hint" style="display:block;margin-top:2px;">选择应用需要的输入控件，可多选</span>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;" id="console-input-types"></div>
+                </div>
+
+                <div class="app-console-section">
+                    <span style="font-weight:500;">交互功能</span>
+                    <span class="field-hint" style="display:block;margin-top:2px;">为应用添加特色交互组件</span>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;" id="console-features"></div>
+                </div>
+
+                <div class="app-console-section">
+                    <span style="font-weight:500;">视觉风格</span>
+                    <span class="field-hint" style="display:block;margin-top:2px;">决定应用的视觉呈现方式</span>
+                    <div style="display:flex;gap:6px;margin-top:8px;" id="console-style">
+                        <button class="style-opt active" data-style="default" onclick="setConsoleStyle('default')">标准 · 整洁卡片</button>
+                        <button class="style-opt" data-style="minimal" onclick="setConsoleStyle('minimal')">极简 · 轻量少装饰</button>
+                        <button class="style-opt" data-style="explorer" onclick="setConsoleStyle('explorer')">探索 · 宽松有趣</button>
+                    </div>
+                </div>
+
+                <div class="app-console-section">
+                    <span style="font-weight:500;">结果布局</span>
+                    <span class="field-hint" style="display:block;margin-top:2px;">选择分析结果的展示方式</span>
+                    <div class="app-console-layout-grid" id="console-layouts" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px;"></div>
+                </div>
+
+                <div class="app-console-section">
+                    <label class="field">
+                        <span>分析提示词</span>
+                        <span class="field-hint">AI 分析时使用的完整提示词，可直接编辑</span>
+                    </label>
+                    <textarea id="console-prompt" rows="10" style="width:100%;font-family:var(--font-ui);font-size:0.8rem;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);resize:vertical;margin-top:6px;" placeholder="AI 分析提示词将在此显示..."></textarea>
+                </div>
+
+                <div class="app-console-section">
+                    <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <span style="font-weight:500;">实时预览</span>
+                        <button class="btn btn-sm" onclick="refreshConsolePreview()">刷新预览</button>
+                    </div>
+                    <div class="app-console-preview" id="console-preview" style="margin-top:8px;">
+                        <p style="color:var(--text-muted);font-size:0.85rem;">暂无预览，配置参数后点击"刷新预览"</p>
+                    </div>
+                </div>
+
+                <div class="app-console-footer">
+                    <button class="btn btn-danger btn-sm" id="console-delete-btn" style="margin-right:auto;display:none;" onclick="deleteConsoleApp()">删除此应用</button>
+                    <button class="btn" onclick="closeConsole()">取消</button>
+                    <button class="btn btn-primary" onclick="saveConsoleApp(false)">保存应用</button>
+                    <button class="btn btn-primary" onclick="saveConsoleApp(true)" id="console-save-enable-btn">保存并启用</button>
+                </div>
+            </div>
+        </div>
     </section>
 
     <section class="settings-section">
@@ -166,6 +242,7 @@
         <div style="display:flex;gap:8px;align-items:flex-start;">
             <input type="text" id="app-gen-desc" placeholder="描述你想要的洞见应用..." style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-ui);font-size:0.85rem;">
             <button type="button" class="btn btn-primary" id="app-gen-btn" onclick="generateApp()" style="white-space:nowrap;">生成应用</button>
+            <button type="button" class="btn btn-sm" onclick="openConsoleBlank()" style="white-space:nowrap;">手动创建</button>
         </div>
         <div id="app-gen-result" style="margin-top:12px;"></div>
     </section>
@@ -581,6 +658,7 @@ function renderAppRow(app, enabled, enabledIds) {
         '<div style="display:flex;gap:4px;flex-shrink:0;align-items:center;">' +
             '<button class="btn btn-sm" onclick="toggleApp(\'' + app.id + '\', ' + enabled + ')">' + (enabled ? '已启用' : '启用') + '</button>' +
             publishBtn +
+            (isBuiltin || !isMine ? '' : '<button class="btn-text" onclick="editAppInConsole(\'' + app.id + '\')" style="font-size:0.75rem;">编辑</button>') +
             (isBuiltin || !isMine ? '' : '<button class="btn-text btn-danger" onclick="deleteFromWarehouse(\'' + app.id + '\')" title="从仓库永久删除">删除</button>') +
         '</div>' +
     '</div>';
@@ -754,13 +832,11 @@ async function deleteFromWarehouse(id) {
 async function generateApp() {
     var descInput = document.getElementById('app-gen-desc');
     var description = descInput.value.trim();
-    if (!description) { alert('请描述你想要的洞见应用'); return; }
+    if (!description) { showToast('请描述你想要的洞见应用', 'error'); return; }
 
     var btn = document.getElementById('app-gen-btn');
-    var resultEl = document.getElementById('app-gen-result');
     btn.disabled = true;
     btn.textContent = '生成中...';
-    resultEl.innerHTML = '<p style="color:var(--text-muted);">AI 正在设计应用...</p>';
 
     try {
         var resp = await fetch('/api/insights/apps/generate', {
@@ -769,44 +845,357 @@ async function generateApp() {
             body: JSON.stringify({description: description})
         });
         var result = await resp.json();
-        if (result.error) { resultEl.innerHTML = '<p style="color:var(--danger);">' + esc(result.error) + '</p>'; return; }
-
-        resultEl.innerHTML =
-            '<div class="summary-card" style="margin-top:0;">' +
-                '<h3>' + esc(result.name) + ' <span style="font-size:0.75rem;color:var(--text-muted);font-weight:normal;">生成成功</span></h3>' +
-                '<p style="font-size:0.85rem;color:var(--text-muted);margin:8px 0;">' + esc(result.description || '') + '</p>' +
-                '<div style="display:flex;gap:8px;">' +
-                    '<button class="btn btn-primary btn-sm" onclick="addGeneratedApp(\'' + result.id + '\')">添加到洞见</button>' +
-                    '<button class="btn btn-sm" onclick="document.getElementById(\'app-gen-result\').innerHTML=\'\';document.getElementById(\'app-gen-desc\').value=\'\';">关闭</button>' +
-                '</div>' +
-            '</div>';
+        if (result.error) { showToast(result.error, 'error'); return; }
 
         allApps.push(result);
         renderAppList();
         descInput.value = '';
+        openConsoleWithData(result);
     } catch(e) {
-        resultEl.innerHTML = '<p style="color:var(--danger);">生成失败: ' + esc(e.message) + '</p>';
+        showToast('生成失败: ' + e.message, 'error');
     } finally {
         btn.disabled = false;
         btn.textContent = '生成应用';
     }
 }
 
-async function addGeneratedApp(id) {
-    var ids = userAppIds.slice();
-    if (ids.indexOf(id) === -1) ids.push(id);
-    try {
-        var resp = await fetch('/api/insights/apps/reorder', {
-            method: 'PUT',
-            headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
-            body: JSON.stringify({ids: ids})
-        });
-        var r = await resp.json();
-        if (r.ok) {
-            userAppIds = ids;
-            renderAppList();
-            showToast('已添加到洞见页面', 'info');
+// ===== App Builder Console =====
+
+var CONSOLE_INPUT_TYPES = [
+    { value: 'scope', label: '文章范围', desc: '下拉选择所有文章或合辑' },
+    { value: 'keyword', label: '关键词', desc: '输入关键词或主题' },
+    { value: 'question', label: '开放问题', desc: '输入想探索的问题' },
+    { value: 'date_range', label: '日期范围', desc: '起止日期选择' },
+    { value: 'none', label: '无输入', desc: '直接点击按钮即可' }
+];
+
+var CONSOLE_FEATURES = [
+    { value: 'surprise', label: '随机探索', desc: '随机选一篇文章分析', conflicts_with: [], requires: [] },
+    { value: 'depth_slider', label: '深度选择', desc: '简/标/深三档分析深度', conflicts_with: [], requires: [] },
+    { value: 'compare', label: '对比模式', desc: '双范围A-vs-B对比', conflicts_with: ['none'], requires: [] },
+    { value: 'count_badge', label: '计数徽章', desc: '显示已分析文章数量', conflicts_with: [], requires: [] },
+    { value: 'auto_run', label: '自动运行', desc: '进入页面即自动分析', conflicts_with: [], requires: ['input_none'] },
+    { value: 'select_first', label: '精选先行', desc: 'AI先筛选相关文章再分析', conflicts_with: [], requires: ['input_keyword_or_question'] }
+];
+
+var CONSOLE_LAYOUTS = [
+    { value: 'cards', label: '卡片', desc: '多项结果以卡片展示', icon: '▨' },
+    { value: 'list', label: '列表', desc: '简洁列表逐条展示', icon: '☰' },
+    { value: 'mixed', label: '混合', desc: '标题+正文+子项+图表', icon: '▶' },
+    { value: 'timeline', label: '时间线', desc: '按日期排列事件节点', icon: '⏱' },
+    { value: 'mindmap', label: '思维导图', desc: '树状层级关系图', icon: '◊' },
+    { value: 'wordcloud', label: '词云', desc: '关键词频率云图', icon: '☁' },
+    { value: 'line', label: '折线图', desc: '趋势数据折线图', icon: '↗' },
+    { value: 'calendar', label: '日历', desc: '日历热力图', icon: '\u{1F4C5}' },
+    { value: 'report', label: '报告', desc: '多章节结构化报告', icon: '\u{1F4C4}' }
+];
+
+var currentConsoleStyle = 'default';
+var currentConsoleLayout = 'mixed';
+var currentConsoleInputTypes = [];
+var currentConsoleFeatures = [];
+
+function toggleConsole() {
+    var body = document.getElementById('console-body');
+    var chevron = document.getElementById('console-chevron');
+    if (body.style.display === 'none') {
+        body.style.display = '';
+        chevron.style.transform = 'rotate(0deg)';
+    } else {
+        body.style.display = 'none';
+        chevron.style.transform = 'rotate(-90deg)';
+    }
+}
+
+function openConsoleBlank() {
+    document.getElementById('console-app-id').value = '';
+    document.getElementById('console-source').value = 'custom';
+    document.getElementById('console-name').value = '';
+    document.getElementById('console-desc').value = '';
+    document.getElementById('console-prompt').value = '';
+    document.getElementById('console-title').textContent = '创建新应用';
+    document.getElementById('console-delete-btn').style.display = 'none';
+    document.getElementById('console-save-enable-btn').textContent = '保存并启用';
+    currentConsoleInputTypes = ['scope'];
+    currentConsoleFeatures = [];
+    currentConsoleStyle = 'default';
+    currentConsoleLayout = 'mixed';
+    renderConsoleOptions();
+    openConsole();
+}
+
+function openConsoleWithData(appData) {
+    document.getElementById('console-app-id').value = appData.id || '';
+    document.getElementById('console-source').value = appData.source || 'custom';
+    document.getElementById('console-name').value = appData.name || '';
+    document.getElementById('console-desc').value = appData.description || '';
+    document.getElementById('console-title').textContent = '编辑应用 - ' + (appData.name || '');
+
+    var config = appData.analysis_config || {};
+    document.getElementById('console-prompt').value = config.prompt || '';
+
+    var opts = config.template_opts || {};
+    var rawInput = opts.input_type || 'scope';
+    currentConsoleInputTypes = Array.isArray(rawInput) ? rawInput.slice() : [rawInput];
+    currentConsoleFeatures = (opts.features || []).slice();
+    currentConsoleStyle = opts.style || 'default';
+    currentConsoleLayout = config.result_layout || 'mixed';
+
+    var isMine = (appData.user_id || '') === currentUserId;
+    document.getElementById('console-delete-btn').style.display =
+        (appData.source !== 'builtin' && isMine) ? '' : 'none';
+    document.getElementById('console-save-enable-btn').textContent = '保存并启用';
+
+    renderConsoleOptions();
+    openConsole();
+}
+
+function openConsole() {
+    var panel = document.getElementById('app-console');
+    panel.style.display = '';
+    document.getElementById('console-body').style.display = '';
+    document.getElementById('console-chevron').style.transform = 'rotate(0deg)';
+    panel.scrollIntoView({ behavior: 'smooth' });
+}
+
+function closeConsole() {
+    document.getElementById('app-console').style.display = 'none';
+}
+
+function renderConsoleOptions() {
+    renderConsoleInputTypes();
+    renderConsoleFeatures();
+    renderConsoleLayouts();
+    renderConsoleStyle();
+}
+
+function renderConsoleInputTypes() {
+    var container = document.getElementById('console-input-types');
+    container.innerHTML = CONSOLE_INPUT_TYPES.map(function(it) {
+        var active = currentConsoleInputTypes.indexOf(it.value) !== -1;
+        return '<button class="option-chip' + (active ? ' active' : '') +
+            '" data-value="' + it.value + '" onclick="toggleInputType(\'' + it.value + '\')" ' +
+            'title="' + esc(it.desc) + '">' + it.label + '</button>';
+    }).join('');
+}
+
+function toggleInputType(value) {
+    var idx = currentConsoleInputTypes.indexOf(value);
+    if (idx >= 0) {
+        if (currentConsoleInputTypes.length > 1) {
+            currentConsoleInputTypes.splice(idx, 1);
         }
-    } catch(e) { alert('添加失败'); }
+    } else {
+        if (value === 'none' && currentConsoleInputTypes.indexOf('none') === -1) {
+            // adding none: auto-remove compare if it was selected
+            currentConsoleFeatures = currentConsoleFeatures.filter(function(f) { return f !== 'compare'; });
+        }
+        currentConsoleInputTypes.push(value);
+    }
+    // remove auto_run if none is deselected
+    if (currentConsoleInputTypes.indexOf('none') === -1) {
+        currentConsoleFeatures = currentConsoleFeatures.filter(function(f) { return f !== 'auto_run'; });
+    }
+    // remove select_first if both keyword and question are deselected
+    if (currentConsoleInputTypes.indexOf('keyword') === -1 && currentConsoleInputTypes.indexOf('question') === -1) {
+        currentConsoleFeatures = currentConsoleFeatures.filter(function(f) { return f !== 'select_first'; });
+    }
+    renderConsoleOptions();
+}
+
+function renderConsoleFeatures() {
+    var container = document.getElementById('console-features');
+    container.innerHTML = CONSOLE_FEATURES.map(function(f) {
+        var active = currentConsoleFeatures.indexOf(f.value) !== -1;
+        var disabled = false;
+        var warning = '';
+
+        if (f.requires.indexOf('input_none') >= 0 && currentConsoleInputTypes.indexOf('none') === -1) {
+            disabled = true;
+            warning = '需要“无输入”控件';
+        }
+        if (f.requires.indexOf('input_keyword_or_question') >= 0 &&
+            currentConsoleInputTypes.indexOf('keyword') === -1 &&
+            currentConsoleInputTypes.indexOf('question') === -1) {
+            disabled = true;
+            warning = '需要“关键词”或“开放问题”控件';
+        }
+        var hasConflict = f.conflicts_with.some(function(c) {
+            return currentConsoleInputTypes.indexOf(c) >= 0;
+        });
+        if (hasConflict) {
+            disabled = true;
+            warning = '与当前输入控件冲突';
+        }
+
+        return '<button class="option-chip' + (active ? ' active' : '') + (disabled ? ' disabled' : '') +
+            '" data-value="' + f.value + '" ' + (disabled ? 'disabled' : '') +
+            ' onclick="toggleFeature(\'' + f.value + '\')" ' +
+            'title="' + esc(f.desc + (warning ? ' - ' + warning : '')) + '">' +
+            f.label + (warning ? ' <span class="opt-hint">' + esc(warning) + '</span>' : '') +
+            '</button>';
+    }).join('');
+}
+
+function toggleFeature(value) {
+    var idx = currentConsoleFeatures.indexOf(value);
+    if (idx >= 0) {
+        currentConsoleFeatures.splice(idx, 1);
+        return;
+    }
+    var feat = CONSOLE_FEATURES.find(function(f) { return f.value === value; });
+    if (!feat) return;
+    var hasConflict = feat.conflicts_with.some(function(c) {
+        return currentConsoleInputTypes.indexOf(c) >= 0;
+    });
+    if (hasConflict) return;
+    var reqNone = feat.requires.indexOf('input_none') >= 0;
+    var reqKQ = feat.requires.indexOf('input_keyword_or_question') >= 0;
+    if (reqNone && currentConsoleInputTypes.indexOf('none') === -1) return;
+    if (reqKQ && currentConsoleInputTypes.indexOf('keyword') === -1 &&
+        currentConsoleInputTypes.indexOf('question') === -1) return;
+    currentConsoleFeatures.push(value);
+    renderConsoleOptions();
+}
+
+function renderConsoleLayouts() {
+    var container = document.getElementById('console-layouts');
+    container.innerHTML = CONSOLE_LAYOUTS.map(function(lo) {
+        var sel = currentConsoleLayout === lo.value;
+        return '<div class="layout-card' + (sel ? ' selected' : '') +
+            '" onclick="setConsoleLayout(\'' + lo.value + '\')">' +
+            '<div class="layout-icon">' + lo.icon + '</div>' +
+            '<div class="layout-name">' + lo.label + '</div>' +
+            '<div class="layout-desc">' + lo.desc + '</div>' +
+            '</div>';
+    }).join('');
+}
+
+function setConsoleLayout(value) {
+    currentConsoleLayout = value;
+    renderConsoleLayouts();
+}
+
+function renderConsoleStyle() {
+    var buttons = document.querySelectorAll('#console-style .style-opt');
+    buttons.forEach(function(btn) {
+        var s = btn.getAttribute('data-style');
+        btn.classList.toggle('active', s === currentConsoleStyle);
+    });
+}
+
+function setConsoleStyle(value) {
+    currentConsoleStyle = value;
+    renderConsoleStyle();
+}
+
+function buildTemplateOpts() {
+    return {
+        input_type: currentConsoleInputTypes.length === 1 ? currentConsoleInputTypes[0] : currentConsoleInputTypes,
+        features: currentConsoleFeatures,
+        style: currentConsoleStyle
+    };
+}
+
+async function refreshConsolePreview() {
+    var previewEl = document.getElementById('console-preview');
+    previewEl.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">加载预览中...</p>';
+
+    try {
+        var resp = await fetch('/api/insights/apps/preview', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+            body: JSON.stringify({
+                name: document.getElementById('console-name').value || '未命名应用',
+                description: document.getElementById('console-desc').value || '',
+                template_opts: buildTemplateOpts()
+            })
+        });
+        var result = await resp.json();
+        if (result.error) {
+            previewEl.innerHTML = '<p style="color:var(--danger);">' + esc(result.error) + '</p>';
+            return;
+        }
+        previewEl.innerHTML = result.html || '<p style="color:var(--text-muted);">无预览内容</p>';
+    } catch (e) {
+        previewEl.innerHTML = '<p style="color:var(--danger);">预览加载失败: ' + esc(e.message) + '</p>';
+    }
+}
+
+async function saveConsoleApp(andEnable) {
+    var name = document.getElementById('console-name').value.trim();
+    var desc = document.getElementById('console-desc').value.trim();
+    var prompt = document.getElementById('console-prompt').value.trim();
+    var appId = document.getElementById('console-app-id').value;
+
+    if (!name) { showToast('请输入应用名称', 'error'); return; }
+
+    var payload = {
+        name: name,
+        description: desc,
+        analysis_config: {
+            prompt: prompt,
+            result_layout: currentConsoleLayout,
+            template_opts: buildTemplateOpts()
+        }
+    };
+
+    var url, method;
+    if (appId) {
+        url = '/api/insights/apps/' + appId;
+        method = 'PUT';
+    } else {
+        url = '/api/insights/apps';
+        method = 'POST';
+    }
+
+    try {
+        var resp = await fetch(url, {
+            method: method,
+            headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+            body: JSON.stringify(payload)
+        });
+        var result = await resp.json();
+        if (result.error) { showToast(result.error, 'error'); return; }
+
+        var savedApp = result;
+        var existingIdx = allApps.findIndex(function(a) { return a.id === savedApp.id; });
+        if (existingIdx >= 0) {
+            allApps[existingIdx] = savedApp;
+        } else {
+            allApps.push(savedApp);
+        }
+
+        if (andEnable) {
+            if (userAppIds.indexOf(savedApp.id) === -1) {
+                userAppIds.push(savedApp.id);
+                await fetch('/api/insights/apps/reorder', {
+                    method: 'PUT',
+                    headers: {'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+                    body: JSON.stringify({ids: userAppIds})
+                });
+            }
+        }
+
+        renderAppList();
+        closeConsole();
+        showToast(andEnable ? '应用已保存并启用' : '应用已保存', 'info');
+    } catch (e) {
+        showToast('保存失败: ' + e.message, 'error');
+    }
+}
+
+async function deleteConsoleApp() {
+    var appId = document.getElementById('console-app-id').value;
+    if (!appId) return;
+    await deleteFromWarehouse(appId);
+    closeConsole();
+}
+
+async function editAppInConsole(id) {
+    var app = allApps.find(function(a) { return a.id === id; });
+    if (!app) return;
+    if (app.source === 'builtin') { showToast('内置应用不可编辑', 'info'); return; }
+    openConsoleWithData(app);
 }
 </script>

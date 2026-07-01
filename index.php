@@ -480,6 +480,81 @@ $router->put('/api/insights/apps/reorder', function() {
     json_response(['ok' => true]);
 });
 
+$router->put('/api/insights/apps/{id}', function($id) {
+    require_login();
+    $file = DATA_DIR . '/insights_apps/' . $id . '.json';
+    $app = json_read($file);
+    if (!$app) json_response(['error' => '应用不存在'], 404);
+
+    $user = current_user();
+    if (($app['user_id'] ?? '') !== $user['id'] && $user['role'] !== 'admin') {
+        json_response(['error' => '无权修改此应用'], 403);
+    }
+    if (($app['source'] ?? '') === 'builtin') {
+        json_response(['error' => '内置应用不可编辑'], 403);
+    }
+
+    $data = body_json();
+    if (isset($data['name'])) $app['name'] = trim($data['name']);
+    if (isset($data['description'])) $app['description'] = trim($data['description']);
+
+    if (isset($data['analysis_config'])) {
+        $config = $data['analysis_config'];
+        $app['analysis_config'] = $app['analysis_config'] ?? [];
+
+        if (isset($config['prompt'])) {
+            $app['analysis_config']['prompt'] = trim($config['prompt']);
+        }
+        if (isset($config['result_layout'])) {
+            $app['analysis_config']['result_layout'] = $config['result_layout'];
+        }
+        if (isset($config['template_opts'])) {
+            $opts = $config['template_opts'];
+            $app['analysis_config']['template_opts'] = $app['analysis_config']['template_opts'] ?? [];
+            if (isset($opts['input_type'])) {
+                $it = $opts['input_type'];
+                $app['analysis_config']['template_opts']['input_type'] = is_array($it) ? $it : [$it];
+            }
+            if (isset($opts['features'])) {
+                $app['analysis_config']['template_opts']['features'] = $opts['features'];
+            }
+            if (isset($opts['style'])) {
+                $app['analysis_config']['template_opts']['style'] = $opts['style'];
+            }
+        }
+    }
+
+    $app['template'] = build_ai_app_template($app);
+    json_write($file, $app);
+    json_response($app);
+});
+
+$router->post('/api/insights/apps/preview', function() {
+    require_login();
+    $data = body_json();
+    $name = trim($data['name'] ?? '预览');
+    $description = trim($data['description'] ?? '');
+    $opts = $data['template_opts'] ?? [];
+
+    $temp_app = [
+        'id' => '__preview__',
+        'name' => $name,
+        'description' => $description,
+        'analysis_config' => [
+            'prompt' => '',
+            'result_layout' => 'mixed',
+            'template_opts' => [
+                'input_type' => $opts['input_type'] ?? 'scope',
+                'features' => $opts['features'] ?? [],
+                'style' => $opts['style'] ?? 'default',
+            ],
+        ],
+    ];
+
+    $html = build_ai_app_template($temp_app);
+    json_response(['html' => $html]);
+});
+
 $router->post('/api/insights/apps/generate', function() {
     require_login();
     $data = body_json();
@@ -531,7 +606,7 @@ $router->post('/api/insights/apps/generate', function() {
 EOS;
 
     $result = call_deepseek(
-        "你是一个应用分析专家。用户描述了一个洞见分析需求，你需要生成应用元数据和给 AI 的分析提示词。\n\n## 核心规则（极其重要）\n\n你的 analysis_prompt 将被直接传给 DeepSeek 执行分析。因此**analysis_prompt 必须是自包含的完整提示词**：\n1. 在 analysis_prompt 开头写清楚分析视角和方法\n2. **在 analysis_prompt 末尾，必须把下面「对应布局的输出 JSON 格式规范」原样粘贴进去**\n3. 末尾务必加上「只输出JSON，不要其他文字」\n\n## 可用布局及输出规范（选择其一，将其规范嵌入 analysis_prompt）\n\n{$specs_text}\n\n{$template_opts_spec}\n\n## 常用分析领域参考\n- 自我剖析：识别个人模式、盲区、价值观、成长轨迹（推荐 cards/mixed/mindmap）\n- 趋势分析：发现情绪、行为、关注点的变化趋势（推荐 line/mixed/calendar）\n- 节点总结：提炼关键转折点、里程碑事件和重要决定（推荐 timeline/report/mixed）\n- 报告生成：综合多维度分析和可视化，生成结构化报告（推荐 report/mixed）\n\n根据用户需求「{$description}」：\n1. 参考上述分析领域，从布局中选择最合适的一个\n2. 编写 analysis_prompt = 分析方法说明 + 你选中的那个布局的输出规范原文 + 「只输出JSON，不要其他文字」\n3. 根据应用特点选择 template_opts（input_type 可以是字符串或数组如 ["scope","keyword"]，让多个控件共存 + features + style），让交互体验贴合功能\n\n返回严格的 JSON（不要带注释）：\n{\n  \"name\": \"应用名称（2-6字）\",\n  \"description\": \"20-50字的功能说明\",\n  \"analysis_prompt\": \"自包含的完整提示词\",\n  \"result_layout\": \"cards|list|mixed|timeline|mindmap|wordcloud|line|calendar|report\",\n  \"template_opts\": {\n    \"input_type\": \"scope|keyword|question|date_range|none（或数组如 [\"scope\",\"keyword\"]）\",\n    \"features\": [\"surprise\"],\n    \"style\": \"default|minimal|explorer\"\n  }\n}\n\n只输出 JSON，不要其他文字。",
+        "你是一个应用分析专家。用户描述了一个洞见分析需求，你需要生成应用元数据和给 AI 的分析提示词。\n\n## 核心规则（极其重要）\n\n你的 analysis_prompt 将被直接传给 DeepSeek 执行分析。因此**analysis_prompt 必须是自包含的完整提示词**：\n1. 在 analysis_prompt 开头写清楚分析视角和方法\n2. **在 analysis_prompt 末尾，必须把下面「对应布局的输出 JSON 格式规范」原样粘贴进去**\n3. 末尾务必加上「只输出JSON，不要其他文字」\n\n## 可用布局及输出规范（选择其一，将其规范嵌入 analysis_prompt）\n\n{$specs_text}\n\n{$template_opts_spec}\n\n## 常用分析领域参考\n- 自我剖析：识别个人模式、盲区、价值观、成长轨迹（推荐 cards/mixed/mindmap）\n- 趋势分析：发现情绪、行为、关注点的变化趋势（推荐 line/mixed/calendar）\n- 节点总结：提炼关键转折点、里程碑事件和重要决定（推荐 timeline/report/mixed）\n- 报告生成：综合多维度分析和可视化，生成结构化报告（推荐 report/mixed）\n\n根据用户需求「{$description}」：\n1. 参考上述分析领域，从布局中选择最合适的一个\n2. 编写 analysis_prompt = 分析方法说明 + 你选中的那个布局的输出规范原文 + 「只输出JSON，不要其他文字」\n3. 根据应用特点选择 template_opts（input_type 可以是字符串或数组如 [scope, keyword]，让多个控件共存 + features + style），让交互体验贴合功能\n\n返回严格的 JSON（不要带注释）：\n{\n  \"name\": \"应用名称（2-6字）\",\n  \"description\": \"20-50字的功能说明\",\n  \"analysis_prompt\": \"自包含的完整提示词\",\n  \"result_layout\": \"cards|list|mixed|timeline|mindmap|wordcloud|line|calendar|report\",\n  \"template_opts\": {\n    \"input_type\": \"scope|keyword|question|date_range|none（或数组如 [scope, keyword]）\",\n    \"features\": [\"surprise\"],\n    \"style\": \"default|minimal|explorer\"\n  }\n}\n\n只输出 JSON，不要其他文字。",
         $description,
         0.7,
         2048
@@ -565,6 +640,75 @@ EOS;
     ];
 
     // 用组件库组装 HTML 模板
+    $app_def['template'] = build_ai_app_template($app_def);
+
+    $dir = DATA_DIR . '/insights_apps';
+    if (!is_dir($dir)) mkdir($dir, 0755, true);
+    json_write($dir . '/' . $id . '.json', $app_def);
+
+    json_response($app_def, 201);
+});
+
+$router->post('/api/insights/apps', function() {
+    require_login();
+    $data = body_json();
+    $name = trim($data['name'] ?? '');
+    if (empty($name)) json_response(['error' => '应用名称不能为空'], 400);
+
+    $config = $data['analysis_config'] ?? [];
+    $opts = $config['template_opts'] ?? [];
+    $input_type = $opts['input_type'] ?? 'scope';
+    $features = $opts['features'] ?? [];
+    $style = $opts['style'] ?? 'default';
+
+    $valid_types = ['scope', 'keyword', 'question', 'date_range', 'none'];
+    if (is_array($input_type)) {
+        foreach ($input_type as $t) {
+            if (!in_array($t, $valid_types, true)) json_response(['error' => '无效的输入控件类型: ' . h($t)], 400);
+        }
+        if (empty($input_type)) json_response(['error' => '至少需要一种输入控件类型'], 400);
+    } else {
+        $input_type = [$input_type];
+    }
+
+    $valid_features = ['surprise', 'depth_slider', 'compare', 'count_badge', 'auto_run', 'select_first'];
+    foreach ($features as $f) {
+        if (!in_array($f, $valid_features, true)) json_response(['error' => '无效的功能: ' . h($f)], 400);
+    }
+
+    if (!in_array($style, ['default', 'minimal', 'explorer'], true)) {
+        json_response(['error' => '无效的视觉风格'], 400);
+    }
+
+    $layout = $config['result_layout'] ?? 'mixed';
+    $valid_layouts = ['cards', 'list', 'mixed', 'timeline', 'mindmap', 'wordcloud', 'line', 'calendar', 'report'];
+    if (!in_array($layout, $valid_layouts, true)) {
+        json_response(['error' => '无效的结果布局'], 400);
+    }
+
+    $id = uuid();
+    $app_def = [
+        'id' => $id,
+        'name' => $name,
+        'description' => trim($data['description'] ?? ''),
+        'icon' => '',
+        'source' => 'custom',
+        'render_type' => 'js',
+        'template' => '',
+        'visibility' => 'private',
+        'analysis_config' => [
+            'prompt' => trim($config['prompt'] ?? ''),
+            'result_layout' => $layout,
+            'template_opts' => [
+                'input_type' => $input_type,
+                'features' => $features,
+                'style' => $style,
+            ],
+        ],
+        'user_id' => current_user()['id'],
+        'created_at' => date('c'),
+    ];
+
     $app_def['template'] = build_ai_app_template($app_def);
 
     $dir = DATA_DIR . '/insights_apps';
