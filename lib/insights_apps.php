@@ -217,12 +217,14 @@ function build_ai_app_template(array $app): string {
     $desc = htmlspecialchars($app['description'] ?? '', ENT_QUOTES, 'UTF-8');
     $config = $app['analysis_config'] ?? [];
     $opts = $config['template_opts'] ?? [];
-    $input_type = $opts['input_type'] ?? 'scope';
+    // 支持数组，向后兼容字符串
+    $raw = $opts['input_type'] ?? 'scope';
+    $input_types = is_array($raw) ? $raw : [$raw];
     $features = $opts['features'] ?? [];
     $style = $opts['style'] ?? 'default';
     $auto_run = in_array('auto_run', $features);
 
-    // 生成合集 scope 选项（供 scope / compare 输入类型使用）
+    // 生成合集 scope 选项（供 scope / compare 使用）
     $scope_opts = '';
     $collections = json_list(DATA_DIR . '/collections');
     $user = current_user();
@@ -241,62 +243,59 @@ function build_ai_app_template(array $app): string {
     $style_class = $style !== 'default' ? ' ai-app-' . $style : '';
     $wrapper_class = 'ai-app-panel' . $style_class;
 
-    // ---- 构建输入区 ----
-    $input_html = '';
-    switch ($input_type) {
-        case 'keyword':
-            $ph = htmlspecialchars($opts['placeholder'] ?? '输入关键词或主题...', ENT_QUOTES, 'UTF-8');
-            $input_html = <<<HTML
-            <input type="text" id="ai-keyword-{$app_id}" placeholder="{$ph}"
-                style="flex:1;min-width:200px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-ui);font-size:0.85rem;"
-                onkeydown="if(event.key==='Enter')runInsightsApp('{$app_id}')">
-            HTML;
-            break;
+    // ---- 构建输入区（支持多个 input_type 并存） ----
+    $widgets = [];
+    $has_scope = false; // 追踪 scope 控件是否存在（compare 需要复用其值）
+    foreach ($input_types as $it) {
+        $w = '';
+        switch ($it) {
+            case 'keyword':
+                $ph = htmlspecialchars($opts['placeholder'] ?? '输入关键词或主题...', ENT_QUOTES, 'UTF-8');
+                $w = "<input type=\"text\" id=\"ai-keyword-{$app_id}\" placeholder=\"{$ph}\"
+                    style=\"flex:1;min-width:160px;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-ui);font-size:0.82rem;\"
+                    onkeydown=\"if(event.key==='Enter')runInsightsApp('{$app_id}')\">";
+                break;
 
-        case 'question':
-            $ph = htmlspecialchars($opts['placeholder'] ?? '输入你想探索的问题...', ENT_QUOTES, 'UTF-8');
-            $qhint = htmlspecialchars($opts['qhint'] ?? '例如：我最近的情绪波动有什么规律？', ENT_QUOTES, 'UTF-8');
-            $input_html = <<<HTML
-            <div style="flex:1;min-width:200px;">
-                <input type="text" id="ai-question-{$app_id}" placeholder="{$ph}"
-                    style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-ui);font-size:0.85rem;"
-                    onkeydown="if(event.key==='Enter')runInsightsApp('{$app_id}')">
-                <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">{$qhint}</div>
-            </div>
-            HTML;
-            break;
+            case 'question':
+                $ph = htmlspecialchars($opts['placeholder'] ?? '输入你想探索的问题...', ENT_QUOTES, 'UTF-8');
+                $qhint = htmlspecialchars($opts['qhint'] ?? '例如：我最近的情绪波动有什么规律？', ENT_QUOTES, 'UTF-8');
+                $w = "<div style=\"flex:1;min-width:160px;\">
+                    <input type=\"text\" id=\"ai-question-{$app_id}\" placeholder=\"{$ph}\"
+                        style=\"width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-ui);font-size:0.82rem;\"
+                        onkeydown=\"if(event.key==='Enter')runInsightsApp('{$app_id}')\">
+                    <div style=\"font-size:0.7rem;color:var(--text-muted);margin-top:3px;\">{$qhint}</div>
+                </div>";
+                break;
 
-        case 'date_range':
-            $input_html = <<<HTML
-            <div style="display:flex;gap:6px;align-items:center;flex:1;min-width:200px;">
-                <input type="date" id="ai-date-start-{$app_id}"
-                    style="flex:1;padding:7px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-ui);font-size:0.8rem;">
-                <span style="color:var(--text-muted);font-size:0.8rem;">至</span>
-                <input type="date" id="ai-date-end-{$app_id}"
-                    style="flex:1;padding:7px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-ui);font-size:0.8rem;">
-            </div>
-            HTML;
-            break;
+            case 'date_range':
+                $w = "<div style=\"display:flex;gap:5px;align-items:center;flex:1;min-width:160px;\">
+                    <input type=\"date\" id=\"ai-date-start-{$app_id}\"
+                        style=\"flex:1;padding:6px 7px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-ui);font-size:0.78rem;\">
+                    <span style=\"color:var(--text-muted);font-size:0.78rem;flex-shrink:0;\">至</span>
+                    <input type=\"date\" id=\"ai-date-end-{$app_id}\"
+                        style=\"flex:1;padding:6px 7px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-ui);font-size:0.78rem;\">
+                </div>";
+                break;
 
-        case 'none':
-            // 无额外输入，仅按钮
-            break;
+            case 'scope':
+                $has_scope = true;
+                $w = "<select id=\"ai-scope-{$app_id}\" style=\"flex:1;min-width:160px;padding:7px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-ui);font-size:0.82rem;\">
+                    <option value=\"all\">所有文章</option>
+                    {$scope_opts}
+                </select>";
+                break;
 
-        case 'scope':
-        default:
-            $input_html = <<<HTML
-            <select id="ai-scope-{$app_id}" style="flex:1;min-width:200px;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-ui);font-size:0.85rem;">
-                <option value="all">所有文章</option>
-                {$scope_opts}
-            </select>
-            HTML;
-            break;
+            case 'none':
+                // 不生成控件
+                break;
+        }
+        if ($w !== '') $widgets[] = $w;
     }
 
     // ---- 构建功能组件 ----
     $features_html = '';
 
-    // 惊喜按钮：随机选一篇文章分析
+    // 惊喜按钮
     if (in_array('surprise', $features)) {
         $features_html .= <<<HTML
         <button class="btn btn-sm ai-surprise-btn" onclick="runInsightsApp('{$app_id}', 'surprise')" title="随机抽取一篇文章，用新视角发现意外洞察" style="flex-shrink:0;">
@@ -306,7 +305,7 @@ function build_ai_app_template(array $app): string {
         HTML;
     }
 
-    // 深度选择器（三段点击）
+    // 深度选择器
     if (in_array('depth_slider', $features)) {
         $features_html .= <<<HTML
         <div class="depth-picker" id="ai-depth-{$app_id}" title="1=快速概览 / 2=标准分析 / 3=深度阅读">
@@ -322,12 +321,12 @@ function build_ai_app_template(array $app): string {
     if (in_array('compare', $features)) {
         $compare_html = <<<HTML
         <div style="display:flex;gap:6px;align-items:center;flex:1;min-width:200px;">
-            <select id="ai-scope-a-{$app_id}" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-ui);font-size:0.8rem;">
+            <select id="ai-scope-a-{$app_id}" style="flex:1;padding:7px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-ui);font-size:0.78rem;">
                 <option value="all">范围A：所有文章</option>
                 {$scope_opts}
             </select>
             <span style="color:var(--text-muted);font-weight:600;">vs</span>
-            <select id="ai-scope-b-{$app_id}" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-ui);font-size:0.8rem;">
+            <select id="ai-scope-b-{$app_id}" style="flex:1;padding:7px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-ui);font-size:0.78rem;">
                 <option value="all">范围B：所有文章</option>
                 {$scope_opts}
             </select>
@@ -335,44 +334,39 @@ function build_ai_app_template(array $app): string {
         HTML;
     }
 
-    // 操作按钮文案（auto_run + none 模式下不显示按钮）
-    $show_button = !($auto_run && $input_type === 'none');
-    $btn_label = '开始分析';
-    if ($input_type === 'question') $btn_label = '探索';
+    // 操作按钮
+    $has_none = in_array('none', $input_types);
+    $show_button = !($auto_run && $has_none);
+    $btn_label = in_array('question', $input_types) ? '探索' : '开始分析';
     $btn_html = $show_button ? "<button class=\"btn btn-primary btn-sm\" onclick=\"runInsightsApp('{$app_id}')\" style=\"flex-shrink:0;\">{$btn_label}</button>" : '';
 
     // ---- 组装 ----
     $panel_html = '';
-    if ($input_type === 'compare') {
-        $panel_html = <<<HTML
-        <div class="ai-controls" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
-            {$compare_html}
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                {$features_html}
-                {$btn_html}
-            </div>
-        </div>
-        HTML;
-    } elseif ($input_type !== 'none') {
-        $panel_html = <<<HTML
-        <div class="ai-controls" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
-            {$input_html}
-            {$features_html}
-            {$btn_html}
-        </div>
-        HTML;
-    } else {
-        // none: 无输入控件
-        if ($show_button || $features_html) {
-            $panel_html = <<<HTML
-        <div class="ai-controls" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
-            {$features_html}
-            {$btn_html}
-        </div>
-        HTML;
-        } else {
-            $panel_html = '';
+    $widget_count = count($widgets);
+
+    if (in_array('compare', $features)) {
+        // 对比模式：widgets 在上，vs 选择器在下方独立行
+        $panel_html = "<div class=\"ai-controls\" style=\"display:flex;flex-direction:column;gap:10px;margin-bottom:16px;\">";
+        if ($widget_count > 0) {
+            $panel_html .= "<div style=\"display:flex;gap:8px;align-items:center;flex-wrap:wrap;\">" . implode('', $widgets) . "</div>";
         }
+        $panel_html .= "<div style=\"display:flex;flex-direction:column;gap:8px;\">{$compare_html}<div style=\"display:flex;gap:8px;align-items:center;flex-wrap:wrap;\">{$features_html}{$btn_html}</div></div>";
+        $panel_html .= '</div>';
+    } elseif ($widget_count > 1) {
+        // 多输入：纵向堆叠，每行一个控件，最后一行放 features + 按钮
+        $panel_html = "<div class=\"ai-controls\" style=\"display:flex;flex-direction:column;gap:8px;margin-bottom:16px;\">";
+        foreach ($widgets as $i => $w) {
+            $panel_html .= "<div style=\"display:flex;gap:8px;align-items:center;\">{$w}</div>";
+        }
+        if ($features_html || $btn_html) {
+            $panel_html .= "<div style=\"display:flex;gap:8px;align-items:center;flex-wrap:wrap;\">{$features_html}{$btn_html}</div>";
+        }
+        $panel_html .= '</div>';
+    } elseif ($widget_count === 1 || $features_html || $btn_html) {
+        // 单输入或无输入（有 features/按钮）：水平一行
+        $panel_html = "<div class=\"ai-controls\" style=\"display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px;\">";
+        $panel_html .= implode('', $widgets) . $features_html . $btn_html;
+        $panel_html .= '</div>';
     }
 
     // 计数徽章
