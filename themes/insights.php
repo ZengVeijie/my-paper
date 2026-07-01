@@ -208,7 +208,7 @@ foreach ($collections as $c) {
         <!-- 草稿预览 -->
         <div id="echo-draft-card" class="echo-card echo-draft-card" style="display:none;">
             <div class="echo-draft-header">
-                <span style="font-size:0.75rem;color:var(--text-muted);font-family:var(--font-ui);">AI 根据你的回答生成了日记草稿</span>
+                <span style="font-size:0.75rem;color:var(--text-muted);font-family:var(--font-ui);">以下是你的回答（AI 仅做了标题提炼、错别字修正和分段）</span>
             </div>
             <h3 id="echo-draft-title" class="echo-draft-title"></h3>
             <div id="echo-draft-content" class="echo-draft-content"></div>

@@ -476,6 +476,8 @@ function renderAppList() {
     // 按已启用分区
     var enabledIds = userAppIds.slice();
     var enabledList = filtered.filter(function(a) { return enabledIds.indexOf(a.id) !== -1; });
+    // 按 userAppIds 顺序排列，使仓库显示顺序与洞见页 tab 顺序一致
+    enabledList.sort(function(a, b) { return enabledIds.indexOf(a.id) - enabledIds.indexOf(b.id); });
     var disabledList = filtered.filter(function(a) { return enabledIds.indexOf(a.id) === -1; });
 
     var html = '';
