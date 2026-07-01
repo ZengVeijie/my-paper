@@ -161,7 +161,7 @@
     </section>
 
     <section class="settings-section">
-        <h2>AI 生成新应用</h2>
+        <h2>生成新应用</h2>
         <p class="section-desc">用一句话描述你想要的分析/洞察需求，AI 将自动生成一个完整的洞见应用。例如：<em>"分析我的情绪波动周期并给出作息建议"</em>、<em>"根据我记录的事件生成年度时间线"</em></p>
         <div style="display:flex;gap:8px;align-items:flex-start;">
             <input type="text" id="app-gen-desc" placeholder="描述你想要的洞见应用..." style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-ui);font-size:0.85rem;">
