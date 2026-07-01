@@ -41,10 +41,16 @@ $is_faved = in_array($article['id'], $user['favorite_article_ids'] ?? []);
             <?php endif; ?>
             <div class="article-detail-actions">
                 <?php if ($is_owner): ?>
-                    <select class="vis-select btn btn-sm" onchange="changeVisibility('<?= h($article['id']) ?>', this.value)" title="可见范围">
-                        <option value="private" <?= ($article['visibility'] ?? 'private') === 'private' ? 'selected' : '' ?>>仅自己</option>
-                        <option value="internal" <?= ($article['visibility'] ?? '') === 'internal' ? 'selected' : '' ?>>站内可见</option>
-                    </select>
+                    <span class="vis-toggle-group" title="可见范围">
+                        <button class="vis-toggle-btn<?= ($article['visibility'] ?? 'private') === 'private' ? ' active' : '' ?>"
+                            onclick="changeVisibility('<?= h($article['id']) ?>', 'private');this.parentElement.querySelectorAll('.vis-toggle-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')" title="仅自己可见">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-7 8-7s8 3 8 7"/></svg>
+                        </button>
+                        <button class="vis-toggle-btn<?= ($article['visibility'] ?? '') === 'internal' ? ' active' : '' ?>"
+                            onclick="changeVisibility('<?= h($article['id']) ?>', 'internal');this.parentElement.querySelectorAll('.vis-toggle-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')" title="站内可见">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="3.5"/><path d="M1 19c0-3 2.5-5.5 5.5-5.5"/><circle cx="16" cy="8" r="3.5"/><path d="M23 19c0-3-2.5-5.5-5.5-5.5"/></svg>
+                        </button>
+                    </span>
                     <span class="actions-sep"></span>
                     <a href="/edit/<?= h($article['id']) ?>" class="btn btn-sm btn-icon" title="编辑">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
