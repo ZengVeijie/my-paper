@@ -146,7 +146,7 @@
 
         <!-- 搜索 + 分类筛选 -->
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
-            <input type="text" id="apps-search" placeholder="搜索应用..." oninput="renderAppList()"
+            <input type="text" id="apps-search" placeholder="搜索应用..." oninput="appEnabledPage=1;appDisabledPage=1;renderAppList()"
                 style="flex:1;min-width:140px;padding:7px 12px;border:1px solid var(--border);border-radius:20px;background:var(--bg-card);font-family:var(--font-ui);font-size:0.8rem;">
             <div class="warehouse-tabs" id="apps-filter-tabs" style="display:flex;gap:4px;flex-shrink:0;">
                 <button class="wh-tab active" onclick="setAppFilter('all', this, event)" style="padding:5px 14px;border-radius:16px;font-size:0.75rem;font-family:var(--font-ui);border:1px solid var(--border);background:var(--accent);color:#fff;cursor:pointer;white-space:nowrap;">全部</button>
@@ -419,9 +419,14 @@ let userAppIds = [];
 
 var appFilter = 'all';
 var currentUserId = '<?= h(current_user()['id']) ?>';
+var appPageSize = 10;
+var appEnabledPage = 1;
+var appDisabledPage = 1;
 
 function setAppFilter(filter, btn, ev) {
     appFilter = filter;
+    appEnabledPage = 1;
+    appDisabledPage = 1;
     document.querySelectorAll('#apps-filter-tabs .wh-tab').forEach(function(b) {
         b.style.background = 'var(--bg-card)';
         b.style.color = 'var(--text)';
@@ -448,7 +453,7 @@ function renderAppList() {
     var searchTerm = (document.getElementById('apps-search') || {}).value || '';
     searchTerm = searchTerm.trim().toLowerCase();
 
-    // 过滤
+    // 过滤（搜索针对所有项，不受分页影响）
     var filtered = allApps.filter(function(a) {
         // Tab 筛选
         var isBuiltin = a.source === 'builtin';
@@ -458,7 +463,7 @@ function renderAppList() {
         if (appFilter === 'mine' && !isMine) return false;
         if (appFilter === 'shared' && !isPublic) return false;
 
-        // 搜索
+        // 搜索（匹配所有项）
         if (searchTerm) {
             var name = (a.name || '').toLowerCase();
             var desc = (a.description || '').toLowerCase();
@@ -476,19 +481,64 @@ function renderAppList() {
     // 按已启用分区
     var enabledIds = userAppIds.slice();
     var enabledList = filtered.filter(function(a) { return enabledIds.indexOf(a.id) !== -1; });
-    // 按 userAppIds 顺序排列，使仓库显示顺序与洞见页 tab 顺序一致
     enabledList.sort(function(a, b) { return enabledIds.indexOf(a.id) - enabledIds.indexOf(b.id); });
     var disabledList = filtered.filter(function(a) { return enabledIds.indexOf(a.id) === -1; });
 
+    // 分页
+    var ps = appPageSize;
+    var enabledTotalPages = Math.ceil(enabledList.length / ps) || 1;
+    var disabledTotalPages = Math.ceil(disabledList.length / ps) || 1;
+    if (appEnabledPage > enabledTotalPages) appEnabledPage = enabledTotalPages;
+    if (appDisabledPage > disabledTotalPages) appDisabledPage = disabledTotalPages;
+    var enabledSlice = enabledList.slice((appEnabledPage - 1) * ps, appEnabledPage * ps);
+    var disabledSlice = disabledList.slice((appDisabledPage - 1) * ps, appDisabledPage * ps);
+
     var html = '';
+
+    // 分页控件生成函数
+    function pageControls(list, total, current, prefix) {
+        if (total <= 1 && list.length <= ps) return '';
+        var ctrl = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:0.78rem;color:var(--text-muted);font-family:var(--font-ui);">';
+        ctrl += '<button class="btn-text" onclick="goAppPage(\'' + prefix + '\', ' + (current - 1) + ')" ' + (current <= 1 ? 'disabled' : '') + ' style="font-size:0.75rem;">◀</button>';
+        ctrl += '<span>' + current + ' / ' + total + '</span>';
+        ctrl += '<button class="btn-text" onclick="goAppPage(\'' + prefix + '\', ' + (current + 1) + ')" ' + (current >= total ? 'disabled' : '') + ' style="font-size:0.75rem;">▶</button>';
+        ctrl += '</div>';
+        return ctrl;
+    }
+
     if (enabledList.length) {
-        html += '<p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px;font-family:var(--font-ui);">已启用（' + enabledList.length + '）</p>';
-        html += enabledList.map(function(a) { return renderAppRow(a, true, enabledIds); }).join('');
+        html += '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">';
+        html += '<p style="font-size:0.8rem;color:var(--text-muted);margin:0;font-family:var(--font-ui);">已启用（' + enabledList.length + '）</p>';
+        html += pageControls(enabledSlice, enabledTotalPages, appEnabledPage, 'enabled');
+        html += '</div>';
+        html += enabledSlice.map(function(a) { return renderAppRow(a, true, enabledIds); }).join('');
+        // 底部分页
+        if (enabledTotalPages > 1) {
+            html += '<div style="text-align:center;padding:8px 0;">' + pageControls(enabledSlice, enabledTotalPages, appEnabledPage, 'enabled') + '</div>';
+        }
     }
     if (disabledList.length) {
-        html += '<p style="font-size:0.8rem;color:var(--text-muted);margin:16px 0 8px;font-family:var(--font-ui);">未启用（' + disabledList.length + '）</p>';
-        html += disabledList.map(function(a) { return renderAppRow(a, false, enabledIds); }).join('');
+        html += '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:16px;">';
+        html += '<p style="font-size:0.8rem;color:var(--text-muted);margin:0;font-family:var(--font-ui);">未启用（' + disabledList.length + '）</p>';
+        html += pageControls(disabledSlice, disabledTotalPages, appDisabledPage, 'disabled');
+        html += '</div>';
+        html += disabledSlice.map(function(a) { return renderAppRow(a, false, enabledIds); }).join('');
+        if (disabledTotalPages > 1) {
+            html += '<div style="text-align:center;padding:8px 0;">' + pageControls(disabledSlice, disabledTotalPages, appDisabledPage, 'disabled') + '</div>';
+        }
     }
+
+    // 每页条数选择器（仅在总数超过默认条数时显示）
+    var hasPages = enabledTotalPages > 1 || disabledTotalPages > 1 || enabledList.length > 10 || disabledList.length > 10;
+    if (hasPages) {
+        html += '<div style="text-align:right;padding-top:12px;font-size:0.75rem;color:var(--text-muted);font-family:var(--font-ui);">';
+        html += '每页 <select onchange="changeAppPageSize(this.value)" style="font-size:0.75rem;padding:2px 4px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);color:var(--text);margin:0 4px;">';
+        [10, 20, 50, 100].forEach(function(n) {
+            html += '<option value="' + n + '"' + (appPageSize === n ? ' selected' : '') + '>' + n + '</option>';
+        });
+        html += '</select> 条</div>';
+    }
+
     el.innerHTML = html;
 }
 
@@ -534,6 +584,18 @@ function renderAppRow(app, enabled, enabledIds) {
             (isBuiltin || !isMine ? '' : '<button class="btn-text btn-danger" onclick="deleteFromWarehouse(\'' + app.id + '\')" title="从仓库永久删除">删除</button>') +
         '</div>' +
     '</div>';
+}
+
+function goAppPage(section, page) {
+    if (section === 'enabled') { appEnabledPage = page; } else { appDisabledPage = page; }
+    renderAppList();
+}
+
+function changeAppPageSize(size) {
+    appPageSize = parseInt(size) || 10;
+    appEnabledPage = 1;
+    appDisabledPage = 1;
+    renderAppList();
 }
 
 async function publishApp(id) {
