@@ -287,7 +287,12 @@ window.addEventListener('pageshow', function(e) {
         if (panel) panel.style.display = '';
         var btn = document.querySelector('.tab-btn[onclick*="apps"]');
         if (btn) btn.classList.add('active');
-        appsLoaded = true; loadApps();
+        // 冷加载时延迟 fetch，避免与其他资源（JS/CSS/字体）抢浏览器并发连接
+        if (document.readyState === 'complete') {
+            loadApps();
+        } else {
+            window.addEventListener('load', function() { loadApps(); });
+        }
     }
 })();
 function switchSettingsTab(name, ev) {
@@ -295,9 +300,9 @@ function switchSettingsTab(name, ev) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.getElementById('settings-' + name).style.display = '';
     ev.target.classList.add('active');
-    if (name === 'shares' && !sharesLoaded) { sharesLoaded = true; loadShares(); }
-    if (name === 'assistant' && !templatesLoaded) { templatesLoaded = true; loadTemplates(); }
-    if (name === 'apps' && !appsLoaded) { appsLoaded = true; loadApps(); }
+    if (name === 'shares' && !sharesLoaded) { loadShares(); }
+    if (name === 'assistant' && !templatesLoaded) { loadTemplates(); }
+    if (name === 'apps' && !appsLoaded) { loadApps(); }
 }
 async function updatePages(e) {
     // Reuse updateProfile which sends to /api/auth/profile
@@ -307,6 +312,7 @@ async function loadShares() {
     try {
         const resp = await fetch('/api/shares', {headers:{'X-Requested-With':'XMLHttpRequest'}});
         const shares = await resp.json();
+        sharesLoaded = true;
         const el = document.getElementById('share-list');
         if (!shares.length) { el.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">暂无分享链接</p>'; return; }
         el.innerHTML = shares.map(s => {
@@ -346,6 +352,7 @@ async function loadTemplates() {
     try {
         const resp = await fetch('/api/ai/templates', {headers:{'X-Requested-With':'XMLHttpRequest'}});
         const templates = await resp.json();
+        templatesLoaded = true;
         const el = document.getElementById('template-list');
         if (!templates.length) { el.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">暂无自定义模板</p>'; return; }
         allTemplates = templates;
@@ -545,6 +552,7 @@ async function loadApps() {
             return;
         }
         allApps = data;
+        appsLoaded = true;
         userAppIds = <?= json_encode($user_insights_apps ?? [], JSON_UNESCAPED_UNICODE) ?>;
         renderAppList();
     } catch(e) {
