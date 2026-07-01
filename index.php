@@ -864,6 +864,52 @@ $router->post('/api/insights/blindspot', function() {
 });
 
 // ===== 回响追问 =====
+
+function get_echo_history(): array {
+    $user = current_user();
+    $dir = DATA_DIR . '/echo_history';
+    if (!is_dir($dir)) return [];
+    $path = $dir . '/' . $user['id'] . '.json';
+    return json_read($path) ?: [];
+}
+
+function save_echo_question(string $question, array $context): void {
+    $user = current_user();
+    $dir = DATA_DIR . '/echo_history';
+    if (!is_dir($dir)) mkdir($dir, 0700, true);
+    $path = $dir . '/' . $user['id'] . '.json';
+    $history = json_read($path) ?: [];
+    // 避免重复保存同一个问题
+    foreach ($history as $h) {
+        if (($h['question'] ?? '') === $question) return;
+    }
+    $history[] = [
+        'question' => $question,
+        'date' => $context['date'] ?? '',
+        'title' => $context['title'] ?? '',
+        'article_id' => $context['article_id'] ?? '',
+        'asked_at' => date('Y-m-d H:i:s'),
+        'answered' => false,
+    ];
+    json_write($path, $history);
+}
+
+function mark_echo_answered(string $question): void {
+    $user = current_user();
+    $path = DATA_DIR . '/echo_history/' . $user['id'] . '.json';
+    $history = json_read($path) ?: [];
+    $updated = false;
+    foreach ($history as &$h) {
+        if (($h['question'] ?? '') === $question && !($h['answered'] ?? false)) {
+            $h['answered'] = true;
+            $h['answered_at'] = date('Y-m-d H:i:s');
+            $updated = true;
+            break;
+        }
+    }
+    if ($updated) json_write($path, $history);
+}
+
 $router->post('/api/insights/echo', function() {
     require_login();
     $data = body_json();
@@ -872,41 +918,39 @@ $router->post('/api/insights/echo', function() {
     if (empty($articles)) json_response(['error' => '没有可分析的文章'], 400);
     $catalog = build_article_catalog($articles, 300);
 
-    // 收集已通过回响追问过的话题（标记为"回响"标签的文章）
-    $user = current_user();
-    $all_user_articles = json_list(DATA_DIR . '/articles');
-    $echo_history = [];
-    foreach ($all_user_articles as $a) {
-        if (($a['user_id'] ?? '') !== $user['id']) continue;
-        $tags = $a['tags'] ?? [];
-        if (!is_array($tags)) $tags = [];
-        if (in_array('回响', $tags)) {
-            $echo_history[] = [
-                'title' => $a['title'] ?? '',
-                'date' => substr($a['created_at'] ?? '', 0, 10),
-                'summary' => mb_substr($a['content'] ?? '', 0, 80),
-            ];
-        }
-    }
+    // 追问库：加载历史记录
+    $history = get_echo_history();
+    $asked_count = count($history);
+    $unanswered = array_filter($history, fn($h) => !($h['answered'] ?? false));
+    $answered = array_filter($history, fn($h) => $h['answered'] ?? false);
+
     $history_text = '';
-    if (!empty($echo_history)) {
-        $history_text = "\n**已追问过的话题（请尽量避免重复）**：\n";
-        foreach ($echo_history as $h) {
-            $history_text .= "- {$h['date']}《{$h['title']}》：{$h['summary']}...\n";
+    if (!empty($answered)) {
+        $history_text = "\n**追问库——已问过的话题（严禁重复，也不要换角度重问）**：\n";
+        $recent = array_slice(array_reverse($answered), 0, 20);
+        foreach ($recent as $h) {
+            $history_text .= "- 【{$h['date']}】{$h['question']}\n";
         }
-        $history_text .= "\n请选择一个与上述话题**无关**的新方向。如果实在没有全新角度，可以选一个不同的侧面。\n";
+        $history_text .= "\n总计已回答 {$asked_count} 个问题（含 " . count($unanswered) . " 个待回答）。请务必选一个与以上所有问题**不同主题领域**的新话题。\n";
     }
 
     $result = call_deepseek(
         "你是一个温柔而敏锐的写作陪伴者。你的任务是通读用户的日记，找到那些「被一带而过但值得追问」的话题。\n\n什么是好话题？\n1. 用户曾提到某个挑战、困难或决定，但没有后续交代\n2. 用户一笔带过却暗含情绪的事件（如\"今天有点不开心但不想多说\"）\n3. 用户曾立下的目标、计划或承诺，后续日记中再未提及\n4. 反复出现的隐约模式——某个名字、某类场景、某种情绪\n\n你需要做的事：\n1. 引用原文中具体的那一两句话\n2. 用友善、好奇、不带压力的语气问一个问题\n3. 解释为什么你觉得这个话题值得重新提起\n\n返回严格JSON（不要注释）：\n{\n  \"question\": \"温暖而具体的追问（30-80字，语气像朋友关心）\",\n  \"context\": {\n    \"date\": \"原文日期 YYYY-MM-DD\",\n    \"title\": \"原文标题\",\n    \"quote\": \"直接引用的原句（15-50字）\",\n    \"article_id\": \"原文ID\"\n  },\n  \"why\": \"一句话解释为什么挑这个话题（10-20字）\"\n}\n\n只输出JSON。",
         "请通读以下日记，找到一个可追问的话题：\n\n{$catalog}{$history_text}",
-        0.8,
+        0.85,
         1024
     );
 
     if (isset($result['error'])) json_response($result, 500);
     $analysis = parse_ai_json($result['text'] ?? '');
-    json_response($analysis ?: ['error' => '未能找到合适的话题，请稍后再试'], $analysis ? 200 : 500);
+    if (!$analysis || empty($analysis['question'])) {
+        json_response(['error' => '未能找到合适的话题，请稍后再试'], 500);
+        return;
+    }
+
+    // 存入追问库
+    save_echo_question($analysis['question'], $analysis['context'] ?? []);
+    json_response($analysis);
 });
 
 $router->post('/api/insights/echo/draft', function() {
@@ -928,6 +972,9 @@ $router->post('/api/insights/echo/draft', function() {
         0.7,
         1024
     );
+
+    // 标记追问库中此问题为已回答
+    if (!empty($question)) mark_echo_answered($question);
 
     if (isset($result['error'])) json_response($result, 500);
     $draft = parse_ai_json($result['text'] ?? '');
