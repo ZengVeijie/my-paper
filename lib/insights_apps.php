@@ -445,3 +445,29 @@ function build_ai_app_template(array $app): string {
 </section>
 HTML;
 }
+
+// 标准化 AI 返回结果：将 AI 多变字段名映射到前端统一字段
+function normalize_ai_result(array $analysis, string $layout, int $article_count): array {
+    $analysis['_layout'] = $layout;
+    $analysis['_article_count'] = $article_count;
+
+    // 标准化 items 数组中的每个 item
+    if (!empty($analysis['items']) && is_array($analysis['items'])) {
+        foreach ($analysis['items'] as &$item) {
+            if (!is_array($item)) continue;
+            $item['badge']  = $item['badge']  ?? $item['type'] ?? $item['label'] ?? $item['bias'] ?? $item['category'] ?? $item['mood'] ?? $item['sentiment'] ?? '';
+            $item['body']   = $item['body']   ?? $item['insight'] ?? $item['explanation'] ?? $item['intervention'] ?? $item['content'] ?? $item['summary'] ?? $item['reasoning'] ?? $item['description'] ?? $item['text'] ?? '';
+            $item['quote']  = $item['quote']  ?? $item['evidence'] ?? '';
+            $item['sub']    = $item['sub']    ?? $item['suggestion'] ?? $item['advice'] ?? $item['detail'] ?? $item['note'] ?? '';
+        }
+        unset($item);
+    }
+
+    // 标准化根级字段（mixed/report 等布局）
+    $analysis['body']  = $analysis['body']  ?? $analysis['insight'] ?? $analysis['summary'] ?? $analysis['reasoning'] ?? $analysis['content'] ?? '';
+    $analysis['badge'] = $analysis['badge'] ?? $analysis['type'] ?? $analysis['label'] ?? '';
+    $analysis['quote'] = $analysis['quote'] ?? $analysis['evidence'] ?? '';
+    $analysis['sub']   = $analysis['sub']   ?? $analysis['suggestion'] ?? $analysis['detail'] ?? '';
+
+    return $analysis;
+}

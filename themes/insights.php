@@ -1996,10 +1996,10 @@ function renderAIResult(containerId, data, layout) {
 
 function renderResultCard(item, idx) {
     var title = item.title || item.name || item.type || '';
-    var body = item.insight || item.explanation || item.intervention || item.content || item.summary || item.reasoning || item.description || item.text || '';
+    var body = item.body || item.insight || item.explanation || item.intervention || item.content || item.summary || item.reasoning || item.description || item.text || '';
     var quote = item.quote || item.evidence || '';
-    var sub = item.suggestion || item.detail || item.note || item.advice || '';
-    var badge = item.type || item.bias || item.label || item.confidence || item.mood || item.sentiment || '';
+    var sub = item.sub || item.suggestion || item.detail || item.note || item.advice || '';
+    var badge = item.badge || item.type || item.bias || item.label || item.confidence || item.mood || item.sentiment || '';
     var colors = ['#5b7b6f','#6b7d8e','#8b7355','#7b6b8e','#5b8b7f','#8e7b6b'];
     var accent = colors[idx % colors.length];
 
@@ -2014,10 +2014,10 @@ function renderResultCard(item, idx) {
 
 function renderResultListItem(item, idx) {
     var title = item.title || item.name || '';
-    var body = item.insight || item.explanation || item.intervention || item.content || item.summary || item.reasoning || item.description || item.text || '';
+    var body = item.body || item.insight || item.explanation || item.intervention || item.content || item.summary || item.reasoning || item.description || item.text || '';
     var quote = item.quote || item.evidence || '';
-    var sub = item.suggestion || item.detail || item.note || item.advice || '';
-    var badge = item.type || item.bias || item.label || '';
+    var sub = item.sub || item.suggestion || item.detail || item.note || item.advice || '';
+    var badge = item.badge || item.type || item.bias || item.label || '';
     return '<div class="ai-numbered-item">' +
         '<span class="ai-numbered-circle">' + (idx+1) + '</span>' +
         '<div style="min-width:0;">' +
@@ -2033,15 +2033,16 @@ function renderResultListItem(item, idx) {
 function renderResultMixed(data) {
     var html = '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;">';
 
-    var heading = data.title || data.type || data.name || '';
+    var heading = data.title || data.name || data.type || '';
     if (heading) {
         html += '<div style="text-align:center;margin-bottom:20px;">' +
             '<h3 style="font-size:1.2rem;margin:0;">' + esc(heading) + '</h3>' +
+            (data.badge ? '<span style="display:inline-block;margin-top:6px;padding:2px 10px;border-radius:10px;font-size:0.75rem;font-family:var(--font-ui);background:var(--accent-light);color:var(--accent);">' + esc(data.badge) + '</span>' : '') +
             (data.confidence ? '<span style="display:inline-block;margin-top:6px;padding:2px 10px;border-radius:10px;font-size:0.75rem;font-family:var(--font-ui);background:var(--accent-light);color:var(--accent);">置信度：' + esc(data.confidence) + '</span>' : '') +
         '</div>';
     }
 
-    var primary = data.insight || data.summary || data.reasoning || data.content || '';
+    var primary = data.body || data.insight || data.summary || data.reasoning || data.content || '';
     if (primary) {
         html += '<div style="line-height:1.9;font-size:0.92rem;white-space:pre-wrap;margin-bottom:20px;">' + esc(primary) + '</div>';
     }
@@ -2487,10 +2488,12 @@ function renderReport(data) {
     sections.forEach(function(sec, i) {
         html += '<div class="report-section">';
         html += '<h4><span class="rs-num">' + (i+1) + '</span>' + esc(sec.heading || sec.title || '章节' + (i+1)) + '</h4>';
-        if (sec.content) html += '<div class="rs-content">' + esc(sec.content) + '</div>';
-        if (sec.insight) html += '<div class="rs-content">' + esc(sec.insight) + '</div>';
-        if (sec.evidence) html += '<div class="ai-card-quote">' + esc(sec.evidence) + '</div>';
-        if (sec.suggestion) html += '<p style="margin-top:10px;font-size:0.85rem;color:var(--text-muted);line-height:1.7;">' + esc(sec.suggestion) + '</p>';
+        var secBody = sec.body || sec.insight || sec.content || '';
+        if (secBody) html += '<div class="rs-content">' + esc(secBody) + '</div>';
+        var secQuote = sec.quote || sec.evidence || '';
+        if (secQuote) html += '<div class="ai-card-quote">' + esc(secQuote) + '</div>';
+        var secSub = sec.sub || sec.suggestion || '';
+        if (secSub) html += '<p style="margin-top:10px;font-size:0.85rem;color:var(--text-muted);line-height:1.7;">' + esc(secSub) + '</p>';
 
         // Chart in section
         if (sec.chart_data) {

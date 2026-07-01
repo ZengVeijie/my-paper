@@ -867,7 +867,7 @@ $router->post('/api/insights/run/{id}', function($id) {
             json_response([
                 'title' => '分批分析摘要',
                 'summary' => '深度分析综合合成时出错（' . $result['error'] . '），以下为各批次的关键信息摘要供手动参考。',
-                'insight' => $fallback,
+                'body' => $fallback,
                 '_layout' => 'mixed',
                 '_article_count' => count($articles),
             ]);
@@ -891,14 +891,13 @@ $router->post('/api/insights/run/{id}', function($id) {
         json_response([
             'title' => '分析结果',
             'summary' => 'AI 返回了非标准格式的结果，以下是原始内容：',
-            'insight' => $result['text'] ?? '(空)',
+            'body' => $result['text'] ?? '(空)',
             '_layout' => 'mixed',
             '_article_count' => count($articles),
         ]);
     }
 
-    $analysis['_layout'] = $config['result_layout'] ?? 'mixed';
-    $analysis['_article_count'] = count($articles);
+    $analysis = normalize_ai_result($analysis, $config['result_layout'] ?? 'mixed', count($articles));
     if ($select_first && $total_articles > 3) {
         $analysis['_selection'] = [
             'total' => $total_articles,
