@@ -924,18 +924,35 @@ $router->post('/api/insights/echo', function() {
     $unanswered = array_filter($history, fn($h) => !($h['answered'] ?? false));
     $answered = array_filter($history, fn($h) => $h['answered'] ?? false);
 
-    $history_text = '';
-    if (!empty($answered)) {
-        $history_text = "\n**追问库——已问过的话题（严禁重复，也不要换角度重问）**：\n";
-        $recent = array_slice(array_reverse($answered), 0, 20);
-        foreach ($recent as $h) {
-            $history_text .= "- 【{$h['date']}】{$h['question']}\n";
+    // 已引用过的文章 ID（避免反复翻同一篇）
+    $used_article_ids = [];
+    foreach ($history as $h) {
+        if (!empty($h['article_id']) && !in_array($h['article_id'], $used_article_ids)) {
+            $used_article_ids[] = $h['article_id'];
         }
-        $history_text .= "\n总计已回答 {$asked_count} 个问题（含 " . count($unanswered) . " 个待回答）。请务必选一个与以上所有问题**不同主题领域**的新话题。\n";
+    }
+
+    $history_text = '';
+    $all_history = array_reverse($history); // 最新在前
+    if (!empty($all_history)) {
+        $history_text = "\n**追问库——以下问题已问过，严禁重复（同主题不同问法也不行）**：\n";
+        $show = array_slice($all_history, 0, 20);
+        foreach ($show as $h) {
+            $status = ($h['answered'] ?? false) ? '✓已答' : '○待答';
+            $history_text .= "- {$status}【{$h['date']}】{$h['question']}\n";
+        }
+        if (!empty($used_article_ids)) {
+            $history_text .= "\n**已引用过的文章（严禁再次选用）**：\n";
+            foreach ($used_article_ids as $aid) {
+                $history_text .= "- 文章ID: {$aid}\n";
+            }
+        }
+        $history_text .= "\n总计 {$asked_count} 次追问（" . count($answered) . " 答 / " . count($unanswered) . " 待答）。";
+        $history_text .= "\n请务必：①选一个全新主题领域 ②从上述列表之外的文章中找话题 ③优先选还没被追问过的日记。\n";
     }
 
     $result = call_deepseek(
-        "你是一个温柔而敏锐的写作陪伴者。你的任务是通读用户的日记，找到那些「被一带而过但值得追问」的话题。\n\n什么是好话题？\n1. 用户曾提到某个挑战、困难或决定，但没有后续交代\n2. 用户一笔带过却暗含情绪的事件（如\"今天有点不开心但不想多说\"）\n3. 用户曾立下的目标、计划或承诺，后续日记中再未提及\n4. 反复出现的隐约模式——某个名字、某类场景、某种情绪\n\n你需要做的事：\n1. 引用原文中具体的那一两句话\n2. 用友善、好奇、不带压力的语气问一个问题\n3. 解释为什么你觉得这个话题值得重新提起\n\n返回严格JSON（不要注释）：\n{\n  \"question\": \"温暖而具体的追问（30-80字，语气像朋友关心）\",\n  \"context\": {\n    \"date\": \"原文日期 YYYY-MM-DD\",\n    \"title\": \"原文标题\",\n    \"quote\": \"直接引用的原句（15-50字）\",\n    \"article_id\": \"原文ID\"\n  },\n  \"why\": \"一句话解释为什么挑这个话题（10-20字）\"\n}\n\n只输出JSON。",
+        "你是一个温柔而敏锐的写作陪伴者。你的任务是通读用户的日记，找到那些「被一带而过但值得追问」的话题。\n\n什么是好话题？\n1. 用户曾提到某个挑战、困难或决定，但没有后续交代\n2. 用户一笔带过却暗含情绪的事件（如\"今天有点不开心但不想多说\"）\n3. 用户曾立下的目标、计划或承诺，后续日记中再未提及\n4. 反复出现的隐约模式——某个名字、某类场景、某种情绪\n\n**关键约束**：\n- 严禁引用追问库中「已引用过的文章」，必须从其他日记中挖掘\n- 严禁与追问库中任何问题属于同一主题领域（即使换问法也不行）\n- 优先选择时间较早、篇幅较短、看起来不起眼但实际有料的日记\n- 如果所有好文章都已被引用过，宁可选择一篇之前被忽略的普通日记，也不要重复用同一篇\n\n你需要做的事：\n1. 引用原文中具体的那一两句话\n2. 用友善、好奇、不带压力的语气问一个问题\n3. 解释为什么你觉得这个话题值得重新提起\n\n返回严格JSON（不要注释）：\n{\n  \"question\": \"温暖而具体的追问（30-80字，语气像朋友关心）\",\n  \"context\": {\n    \"date\": \"原文日期 YYYY-MM-DD\",\n    \"title\": \"原文标题\",\n    \"quote\": \"直接引用的原句（15-50字）\",\n    \"article_id\": \"原文ID\"\n  },\n  \"why\": \"一句话解释为什么挑这个话题（10-20字）\"\n}\n\n只输出JSON。",
         "请通读以下日记，找到一个可追问的话题：\n\n{$catalog}{$history_text}",
         0.85,
         1024
