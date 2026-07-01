@@ -158,82 +158,6 @@
         <div id="apps-list" style="margin-bottom:20px;">
             <p style="color:var(--text-muted);font-size:0.85rem;">加载中...</p>
         </div>
-
-        <!-- ===== 应用生成操作台 ===== -->
-        <div class="app-console" id="app-console" style="display:none;">
-            <div class="app-console-toggle" onclick="toggleConsole()">
-                <h3 id="console-title" style="font-size:0.95rem;margin:0;">应用生成操作台</h3>
-                <span style="display:flex;gap:8px;align-items:center;">
-                    <span id="console-chevron">&#9660;</span>
-                </span>
-            </div>
-            <div class="app-console-body" id="console-body">
-                <input type="hidden" id="console-app-id" value="">
-                <input type="hidden" id="console-source" value="custom">
-
-                <div class="app-console-section">
-                    <label class="field"><span>应用名称</span></label>
-                    <input type="text" id="console-name" placeholder="如：情绪波动分析" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-ui);font-size:0.82rem;">
-                </div>
-                <div class="app-console-section">
-                    <label class="field"><span>应用描述</span></label>
-                    <input type="text" id="console-desc" placeholder="简短描述该应用的功能..." style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-ui);font-size:0.82rem;">
-                </div>
-
-                <div class="app-console-section">
-                    <span style="font-weight:500;">输入控件</span>
-                    <span class="field-hint" style="display:block;margin-top:2px;">选择应用需要的输入控件，可多选</span>
-                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;" id="console-input-types"></div>
-                </div>
-
-                <div class="app-console-section">
-                    <span style="font-weight:500;">交互功能</span>
-                    <span class="field-hint" style="display:block;margin-top:2px;">为应用添加特色交互组件</span>
-                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;" id="console-features"></div>
-                </div>
-
-                <div class="app-console-section">
-                    <span style="font-weight:500;">视觉风格</span>
-                    <span class="field-hint" style="display:block;margin-top:2px;">决定应用的视觉呈现方式</span>
-                    <div style="display:flex;gap:6px;margin-top:8px;" id="console-style">
-                        <button class="style-opt active" data-style="default" onclick="setConsoleStyle('default')">标准 · 整洁卡片</button>
-                        <button class="style-opt" data-style="minimal" onclick="setConsoleStyle('minimal')">极简 · 轻量少装饰</button>
-                        <button class="style-opt" data-style="explorer" onclick="setConsoleStyle('explorer')">探索 · 宽松有趣</button>
-                    </div>
-                </div>
-
-                <div class="app-console-section">
-                    <span style="font-weight:500;">结果布局</span>
-                    <span class="field-hint" style="display:block;margin-top:2px;">选择分析结果的展示方式</span>
-                    <div class="app-console-layout-grid" id="console-layouts" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px;"></div>
-                </div>
-
-                <div class="app-console-section">
-                    <label class="field">
-                        <span>分析提示词</span>
-                        <span class="field-hint">AI 分析时使用的完整提示词，可直接编辑</span>
-                    </label>
-                    <textarea id="console-prompt" rows="10" style="width:100%;font-family:var(--font-ui);font-size:0.8rem;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);resize:vertical;margin-top:6px;" placeholder="AI 分析提示词将在此显示..."></textarea>
-                </div>
-
-                <div class="app-console-section">
-                    <div style="display:flex;align-items:center;justify-content:space-between;">
-                        <span style="font-weight:500;">实时预览</span>
-                        <button class="btn btn-sm" onclick="refreshConsolePreview()">刷新预览</button>
-                    </div>
-                    <div class="app-console-preview" id="console-preview" style="margin-top:8px;">
-                        <p style="color:var(--text-muted);font-size:0.85rem;">暂无预览，配置参数后点击"刷新预览"</p>
-                    </div>
-                </div>
-
-                <div class="app-console-footer">
-                    <button class="btn btn-danger btn-sm" id="console-delete-btn" style="margin-right:auto;display:none;" onclick="deleteConsoleApp()">删除此应用</button>
-                    <button class="btn" onclick="closeConsole()">取消</button>
-                    <button class="btn btn-primary" onclick="saveConsoleApp(false)">保存应用</button>
-                    <button class="btn btn-primary" onclick="saveConsoleApp(true)" id="console-save-enable-btn">保存并启用</button>
-                </div>
-            </div>
-        </div>
     </section>
 
     <section class="settings-section">
@@ -242,10 +166,86 @@
         <div style="display:flex;gap:8px;align-items:flex-start;">
             <input type="text" id="app-gen-desc" placeholder="描述你想要的洞见应用..." style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-ui);font-size:0.85rem;">
             <button type="button" class="btn btn-primary" id="app-gen-btn" onclick="generateApp()" style="white-space:nowrap;">生成应用</button>
-            <button type="button" class="btn btn-sm" onclick="openConsoleBlank()" style="white-space:nowrap;">手动创建</button>
+            <button type="button" class="btn btn-primary" onclick="openConsoleBlank()" style="white-space:nowrap;">手动创建</button>
         </div>
         <div id="app-gen-result" style="margin-top:12px;"></div>
     </section>
+
+    <!-- ===== 应用生成操作台 ===== -->
+    <div class="app-console" id="app-console" style="display:none;">
+        <div class="app-console-toggle" onclick="toggleConsole()">
+            <h3 id="console-title" style="font-size:0.95rem;margin:0;">应用生成操作台</h3>
+            <span style="display:flex;gap:8px;align-items:center;">
+                <span id="console-chevron">&#9660;</span>
+            </span>
+        </div>
+        <div class="app-console-body" id="console-body">
+            <input type="hidden" id="console-app-id" value="">
+            <input type="hidden" id="console-source" value="custom">
+
+            <div class="app-console-section">
+                <label class="field"><span>应用名称</span></label>
+                <input type="text" id="console-name" placeholder="如：情绪波动分析" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-ui);font-size:0.82rem;">
+            </div>
+            <div class="app-console-section">
+                <label class="field"><span>应用描述</span></label>
+                <input type="text" id="console-desc" placeholder="简短描述该应用的功能..." style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-ui);font-size:0.82rem;">
+            </div>
+
+            <div class="app-console-section">
+                <span style="font-weight:500;">输入控件</span>
+                <span class="field-hint" style="display:block;margin-top:2px;">选择应用需要的输入控件，可多选</span>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;" id="console-input-types"></div>
+            </div>
+
+            <div class="app-console-section">
+                <span style="font-weight:500;">交互功能</span>
+                <span class="field-hint" style="display:block;margin-top:2px;">为应用添加特色交互组件</span>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;" id="console-features"></div>
+            </div>
+
+            <div class="app-console-section">
+                <span style="font-weight:500;">视觉风格</span>
+                <span class="field-hint" style="display:block;margin-top:2px;">决定应用的视觉呈现方式</span>
+                <div style="display:flex;gap:6px;margin-top:8px;" id="console-style">
+                    <button class="style-opt active" data-style="default" onclick="setConsoleStyle('default')">标准 · 整洁卡片</button>
+                    <button class="style-opt" data-style="minimal" onclick="setConsoleStyle('minimal')">极简 · 轻量少装饰</button>
+                    <button class="style-opt" data-style="explorer" onclick="setConsoleStyle('explorer')">探索 · 宽松有趣</button>
+                </div>
+            </div>
+
+            <div class="app-console-section">
+                <span style="font-weight:500;">结果布局</span>
+                <span class="field-hint" style="display:block;margin-top:2px;">选择分析结果的展示方式</span>
+                <div class="app-console-layout-grid" id="console-layouts" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px;"></div>
+            </div>
+
+            <div class="app-console-section">
+                <label class="field">
+                    <span>分析提示词</span>
+                    <span class="field-hint">AI 分析时使用的完整提示词，可直接编辑</span>
+                </label>
+                <textarea id="console-prompt" rows="10" style="width:100%;font-family:var(--font-ui);font-size:0.8rem;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);resize:vertical;margin-top:6px;" placeholder="AI 分析提示词将在此显示..."></textarea>
+            </div>
+
+            <div class="app-console-section">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span style="font-weight:500;">实时预览</span>
+                    <button class="btn btn-sm" onclick="refreshConsolePreview()">刷新预览</button>
+                </div>
+                <div class="app-console-preview" id="console-preview" style="margin-top:8px;">
+                    <p style="color:var(--text-muted);font-size:0.85rem;">暂无预览，配置参数后点击"刷新预览"</p>
+                </div>
+            </div>
+
+            <div class="app-console-footer">
+                <button class="btn btn-danger btn-sm" id="console-delete-btn" style="margin-right:auto;display:none;" onclick="deleteConsoleApp()">删除此应用</button>
+                <button class="btn" onclick="closeConsole()">取消</button>
+                <button class="btn btn-primary" onclick="saveConsoleApp(false)">保存应用</button>
+                <button class="btn btn-primary" onclick="saveConsoleApp(true)" id="console-save-enable-btn">保存并启用</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- 分享管理 -->
