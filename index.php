@@ -440,7 +440,35 @@ $router->post('/api/ai/template/{id}', 'handle_ai_use_template');
 
 $router->get('/api/insights/apps', function() {
     require_login();
-    json_response(get_all_insights_apps());
+    $apps = get_all_insights_apps();
+    // 为自定义应用附加创建者昵称
+    $user_cache = [];
+    foreach ($apps as &$app) {
+        if (($app['source'] ?? '') !== 'builtin' && !empty($app['user_id'])) {
+            if (!isset($user_cache[$app['user_id']])) {
+                $u = json_read(DATA_DIR . '/users/' . $app['user_id'] . '.json');
+                $user_cache[$app['user_id']] = $u['nickname'] ?? $u['username'] ?? '未知';
+            }
+            $app['user_name'] = $user_cache[$app['user_id']];
+        }
+    }
+    unset($app);
+    json_response($apps);
+});
+
+$router->put('/api/insights/apps/{id}/publish', function($id) {
+    require_login();
+    $file = DATA_DIR . '/insights_apps/' . $id . '.json';
+    $app = json_read($file);
+    if (!$app) json_response(['error' => '应用不存在'], 404);
+    $user = current_user();
+    if (($app['user_id'] ?? '') !== $user['id'] && $user['role'] !== 'admin') {
+        json_response(['error' => '只能操作自己创建的应用'], 403);
+    }
+    $current = $app['visibility'] ?? 'private';
+    $app['visibility'] = ($current === 'public') ? 'private' : 'public';
+    json_write($file, $app);
+    json_response(['ok' => true, 'visibility' => $app['visibility']]);
 });
 
 $router->put('/api/insights/apps/reorder', function() {
@@ -525,6 +553,7 @@ EOS;
         'source' => 'ai',
         'render_type' => 'js',
         'template' => '',
+        'visibility' => 'private',
         'analysis_config' => [
             'prompt' => $generated['analysis_prompt'],
             'result_layout' => $generated['result_layout'] ?? 'mixed',

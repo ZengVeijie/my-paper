@@ -141,8 +141,20 @@
 <!-- 洞见仓库 -->
 <div class="admin-panel" id="settings-apps" style="display:none">
     <section class="settings-section">
-        <h2>我的应用</h2>
-        <p class="section-desc">管理洞见页面的应用展示。拖拽排序、启用/禁用，或从仓库中彻底删除自定义应用。</p>
+        <h2>应用仓库</h2>
+        <p class="section-desc">管理洞见页面的应用。启用/禁用、排序或删除自定义应用。将好用的应用发布到站内共享，或使用别人分享的应用。</p>
+
+        <!-- 搜索 + 分类筛选 -->
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+            <input type="text" id="apps-search" placeholder="搜索应用..." oninput="renderAppList()"
+                style="flex:1;min-width:140px;padding:7px 12px;border:1px solid var(--border);border-radius:20px;background:var(--bg-card);font-family:var(--font-ui);font-size:0.8rem;">
+            <div class="warehouse-tabs" id="apps-filter-tabs" style="display:flex;gap:4px;flex-shrink:0;">
+                <button class="wh-tab active" onclick="setAppFilter('all', this, event)" style="padding:5px 14px;border-radius:16px;font-size:0.75rem;font-family:var(--font-ui);border:1px solid var(--border);background:var(--accent);color:#fff;cursor:pointer;white-space:nowrap;">全部</button>
+                <button class="wh-tab" onclick="setAppFilter('builtin', this, event)" style="padding:5px 14px;border-radius:16px;font-size:0.75rem;font-family:var(--font-ui);border:1px solid var(--border);background:var(--bg-card);cursor:pointer;white-space:nowrap;">内置</button>
+                <button class="wh-tab" onclick="setAppFilter('mine', this, event)" style="padding:5px 14px;border-radius:16px;font-size:0.75rem;font-family:var(--font-ui);border:1px solid var(--border);background:var(--bg-card);cursor:pointer;white-space:nowrap;">我的</button>
+                <button class="wh-tab" onclick="setAppFilter('shared', this, event)" style="padding:5px 14px;border-radius:16px;font-size:0.75rem;font-family:var(--font-ui);border:1px solid var(--border);background:var(--bg-card);cursor:pointer;white-space:nowrap;">站内共享</button>
+            </div>
+        </div>
         <div id="apps-list" style="margin-bottom:20px;">
             <p style="color:var(--text-muted);font-size:0.85rem;">加载中...</p>
         </div>
@@ -405,6 +417,21 @@ async function deleteTemplate(id) {
 let allApps = [];
 let userAppIds = [];
 
+var appFilter = 'all';
+var currentUserId = '<?= h(current_user()['id']) ?>';
+
+function setAppFilter(filter, btn, ev) {
+    appFilter = filter;
+    document.querySelectorAll('#apps-filter-tabs .wh-tab').forEach(function(b) {
+        b.style.background = 'var(--bg-card)';
+        b.style.color = 'var(--text)';
+    });
+    btn.style.background = 'var(--accent)';
+    btn.style.color = '#fff';
+    renderAppList();
+    if (ev) ev.preventDefault();
+}
+
 async function loadApps() {
     try {
         var resp = await fetch('/api/insights/apps', {headers:{'X-Requested-With':'XMLHttpRequest'}});
@@ -418,24 +445,60 @@ function renderAppList() {
     var el = document.getElementById('apps-list');
     if (!allApps.length) { el.innerHTML = '<p style="color:var(--text-muted);">暂无应用</p>'; return; }
 
-    var enabledIds = userAppIds.slice();
-    var disabledApps = allApps.filter(function(a) { return enabledIds.indexOf(a.id) === -1; });
+    var searchTerm = (document.getElementById('apps-search') || {}).value || '';
+    searchTerm = searchTerm.trim().toLowerCase();
 
-    el.innerHTML =
-        '<p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px;font-family:var(--font-ui);">已启用（' + enabledIds.length + '）— 拖动排序将影响洞见页展示顺序</p>' +
-        enabledIds.map(function(id) {
-            var a = allApps.find(function(x) { return x.id === id; });
-            if (!a) return '';
-            return renderAppRow(a, true, enabledIds);
-        }).join('') +
-        (disabledApps.length ? '<p style="font-size:0.8rem;color:var(--text-muted);margin:16px 0 8px;font-family:var(--font-ui);">未启用（' + disabledApps.length + '）</p>' : '') +
-        disabledApps.map(function(a) { return renderAppRow(a, false, enabledIds); }).join('');
+    // 过滤
+    var filtered = allApps.filter(function(a) {
+        // Tab 筛选
+        var isBuiltin = a.source === 'builtin';
+        var isMine = (a.user_id || '') === currentUserId;
+        var isPublic = (a.visibility || 'private') === 'public' && !isMine;
+        if (appFilter === 'builtin' && !isBuiltin) return false;
+        if (appFilter === 'mine' && !isMine) return false;
+        if (appFilter === 'shared' && !isPublic) return false;
+
+        // 搜索
+        if (searchTerm) {
+            var name = (a.name || '').toLowerCase();
+            var desc = (a.description || '').toLowerCase();
+            if (name.indexOf(searchTerm) === -1 && desc.indexOf(searchTerm) === -1) return false;
+        }
+        return true;
+    });
+
+    if (!filtered.length) {
+        el.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;padding:20px 0;">' +
+            (searchTerm ? '没有匹配的应用' : (appFilter === 'shared' ? '还没有人分享应用' : '暂无应用')) + '</p>';
+        return;
+    }
+
+    // 按已启用分区
+    var enabledIds = userAppIds.slice();
+    var enabledList = filtered.filter(function(a) { return enabledIds.indexOf(a.id) !== -1; });
+    var disabledList = filtered.filter(function(a) { return enabledIds.indexOf(a.id) === -1; });
+
+    var html = '';
+    if (enabledList.length) {
+        html += '<p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px;font-family:var(--font-ui);">已启用（' + enabledList.length + '）</p>';
+        html += enabledList.map(function(a) { return renderAppRow(a, true, enabledIds); }).join('');
+    }
+    if (disabledList.length) {
+        html += '<p style="font-size:0.8rem;color:var(--text-muted);margin:16px 0 8px;font-family:var(--font-ui);">未启用（' + disabledList.length + '）</p>';
+        html += disabledList.map(function(a) { return renderAppRow(a, false, enabledIds); }).join('');
+    }
+    el.innerHTML = html;
 }
 
 function renderAppRow(app, enabled, enabledIds) {
     var idx = enabledIds.indexOf(app.id);
     var isBuiltin = app.source === 'builtin';
+    var isMine = (app.user_id || '') === currentUserId;
+    var isPublic = (app.visibility || 'private') === 'public';
+
     var sourceLabel = isBuiltin ? '内置' : (app.source === 'ai' ? 'AI 生成' : '自定义');
+    if (isPublic && !isMine) sourceLabel = '共享';
+
     var sortBtns = '';
     if (enabled) {
         sortBtns =
@@ -443,19 +506,46 @@ function renderAppRow(app, enabled, enabledIds) {
             '<button class="btn-text" onclick="moveApp(\'' + app.id + '\', 1)" ' + (idx === enabledIds.length - 1 ? 'disabled' : '') + ' style="font-size:0.65rem;padding:0 2px;" title="下移">▼</button>';
     }
 
+    // 发布/取消共享按钮（仅自己的非内置应用）
+    var publishBtn = '';
+    if (!isBuiltin && isMine) {
+        publishBtn = '<button class="btn-text" onclick="publishApp(\'' + app.id + '\')" title="' + (isPublic ? '取消共享' : '发布到站内共享') + '" style="font-size:0.7rem;">' +
+            (isPublic ? '取消共享' : '发布共享') + '</button>';
+    }
+
     return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border-light);gap:10px;">' +
         '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">' + sortBtns + '</div>' +
         '<div style="min-width:0;flex:1;">' +
             '<div style="font-weight:500;font-size:0.85rem;">' + esc(app.name) +
-                ' <span style="font-size:0.65rem;color:var(--text-muted);font-family:var(--font-ui);">(' + sourceLabel + ')</span>' +
+                (isPublic && !isMine ? ' <span style="font-size:0.65rem;color:var(--text-muted);">@' + esc(app.user_name || '未知') + '</span>' : '') +
+                ' <span style="font-size:0.65rem;color:var(--text-muted);font-family:var(--font-ui);">(' + sourceLabel + (isPublic && isMine ? ' · 已共享' : '') + ')</span>' +
             '</div>' +
             '<div style="font-size:0.75rem;color:var(--text-muted);">' + esc(app.description || '') + '</div>' +
         '</div>' +
         '<div style="display:flex;gap:4px;flex-shrink:0;align-items:center;">' +
             '<button class="btn btn-sm" onclick="toggleApp(\'' + app.id + '\', ' + enabled + ')">' + (enabled ? '已启用' : '启用') + '</button>' +
-            (isBuiltin ? '' : '<button class="btn-text btn-danger" onclick="deleteFromWarehouse(\'' + app.id + '\')" title="从仓库永久删除">删除</button>') +
+            publishBtn +
+            (isBuiltin || !isMine ? '' : '<button class="btn-text btn-danger" onclick="deleteFromWarehouse(\'' + app.id + '\')" title="从仓库永久删除">删除</button>') +
         '</div>' +
     '</div>';
+}
+
+async function publishApp(id) {
+    try {
+        var resp = await fetch('/api/insights/apps/' + id + '/publish', {
+            method: 'PUT',
+            headers: {'X-Requested-With':'XMLHttpRequest'}
+        });
+        var r = await resp.json();
+        if (r.ok) {
+            var app = allApps.find(function(a) { return a.id === id; });
+            if (app) app.visibility = r.visibility;
+            renderAppList();
+            showToast(r.visibility === 'public' ? '已发布到站内共享' : '已取消共享', 'info');
+        } else {
+            alert(r.error || '操作失败');
+        }
+    } catch(e) { alert('请求失败'); }
 }
 
 async function toggleApp(id, currentlyEnabled) {

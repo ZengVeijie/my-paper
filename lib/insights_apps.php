@@ -83,9 +83,15 @@ function get_all_insights_apps(): array {
     $builtin = get_builtin_insights_apps();
     $custom = [];
     $dir = DATA_DIR . '/insights_apps';
+    $user = current_user();
     if (is_dir($dir)) {
         foreach (json_list($dir) as $app) {
-            $custom[] = $app;
+            $visibility = $app['visibility'] ?? 'private';
+            $owner_id = $app['user_id'] ?? '';
+            // 自己的应用全部可见；他人的仅公开的可见
+            if ($owner_id === $user['id'] || $visibility === 'public') {
+                $custom[] = $app;
+            }
         }
         usort($custom, fn($a, $b) => strtotime($b['created_at'] ?? '') - strtotime($a['created_at'] ?? ''));
     }
