@@ -2014,12 +2014,18 @@ function renderResultCard(item, idx) {
 
 function renderResultListItem(item, idx) {
     var title = item.title || item.name || '';
-    var body = item.content || item.summary || item.text || item.description || '';
+    var body = item.insight || item.explanation || item.intervention || item.content || item.summary || item.reasoning || item.description || item.text || '';
+    var quote = item.quote || item.evidence || '';
+    var sub = item.suggestion || item.detail || item.note || item.advice || '';
+    var badge = item.type || item.bias || item.label || '';
     return '<div class="ai-numbered-item">' +
         '<span class="ai-numbered-circle">' + (idx+1) + '</span>' +
         '<div style="min-width:0;">' +
+            (badge ? '<span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:0.7rem;font-family:var(--font-ui);background:var(--accent-light);color:var(--accent);margin-bottom:4px;">' + esc(badge) + '</span>' : '') +
             (title ? '<div style="font-weight:600;font-size:0.9rem;margin-bottom:2px;">' + esc(title) + '</div>' : '') +
             (body ? '<div style="font-size:0.85rem;color:var(--text-muted);line-height:1.6;">' + esc(body) + '</div>' : '') +
+            (quote ? '<div style="border-left:3px solid var(--accent);padding:4px 0 4px 12px;margin:8px 0;font-size:0.82rem;color:var(--text-muted);font-style:italic;">' + esc(quote) + '</div>' : '') +
+            (sub ? '<p style="margin:8px 0 0;font-size:0.82rem;line-height:1.6;color:var(--text-muted);">' + esc(sub) + '</p>' : '') +
         '</div>' +
     '</div>';
 }
