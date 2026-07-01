@@ -41,17 +41,25 @@ $is_faved = in_array($article['id'], $user['favorite_article_ids'] ?? []);
             <?php endif; ?>
             <div class="article-detail-actions">
                 <?php if ($is_owner): ?>
-                    <a href="/edit/<?= h($article['id']) ?>" class="btn btn-sm">编辑</a>
-                    <a href="/api/export/<?= h($article['id']) ?>" class="btn btn-sm">导出 .md</a>
-                    <select class="vis-select btn btn-sm" onchange="changeVisibility('<?= h($article['id']) ?>', this.value)">
+                    <a href="/edit/<?= h($article['id']) ?>" class="btn btn-sm btn-icon" title="编辑">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                    </a>
+                    <a href="/api/export/<?= h($article['id']) ?>" class="btn btn-sm btn-icon" title="导出 Markdown">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    </a>
+                    <select class="vis-select btn btn-sm" onchange="changeVisibility('<?= h($article['id']) ?>', this.value)" title="可见范围">
                         <option value="private" <?= ($article['visibility'] ?? 'private') === 'private' ? 'selected' : '' ?>>仅自己</option>
                         <option value="internal" <?= ($article['visibility'] ?? '') === 'internal' ? 'selected' : '' ?>>站内可见</option>
                     </select>
-                    <button class="btn btn-sm" onclick="quickShare('<?= h($article['id']) ?>')" title="分享">分享</button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteArticle('<?= h($article['id']) ?>', true)">删除</button>
+                    <button class="btn btn-sm btn-icon" onclick="quickShare('<?= h($article['id']) ?>')" title="分享">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                    </button>
+                    <button class="btn btn-sm btn-icon btn-danger" onclick="deleteArticle('<?= h($article['id']) ?>', true)" title="删除">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    </button>
                 <?php endif; ?>
-                <button class="btn btn-sm<?= $is_faved ? ' btn-primary' : '' ?>" id="fav-btn" onclick="toggleFavorite('<?= h($article['id']) ?>')">
-                    <?= $is_faved ? '★ 已收藏' : '☆ 收藏' ?>
+                <button class="btn btn-sm btn-icon<?= $is_faved ? ' btn-primary' : '' ?>" id="fav-btn" onclick="toggleFavorite('<?= h($article['id']) ?>')" title="<?= $is_faved ? '取消收藏' : '收藏' ?>">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="<?= $is_faved ? 'currentColor' : 'none' ?>" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
                 </button>
             </div>
         </div>
@@ -95,8 +103,10 @@ async function toggleFavorite(articleId) {
         });
         const result = await resp.json();
         if (result.favorited !== undefined) {
-            btn.innerHTML = result.favorited ? '★ 已收藏' : '☆ 收藏';
+            var svg = btn.querySelector('svg');
+            if (svg) svg.setAttribute('fill', result.favorited ? 'currentColor' : 'none');
             btn.classList.toggle('btn-primary', result.favorited);
+            btn.setAttribute('title', result.favorited ? '取消收藏' : '收藏');
         }
     } catch (e) { /* ignore */ }
 }

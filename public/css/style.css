@@ -462,7 +462,23 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
 
 .article-detail-header h1 { font-size: 1.8rem; margin: 8px 0 12px; }
 
-.article-detail-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.article-detail-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; align-items: center; }
+
+.btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: var(--radius);
+    transition: background 0.15s, color 0.15s;
+    position: relative;
+}
+.btn-icon:hover { background: var(--bg-hover, rgba(0,0,0,0.06)); }
+.btn-icon.btn-danger:hover { background: rgba(220,53,69,0.1); color: var(--danger); }
+.btn-icon.btn-primary { background: var(--accent); color: #fff; }
+.btn-icon.btn-primary:hover { background: var(--accent-hover, var(--accent)); opacity: 0.9; }
 
 .edited-mark { color: var(--text-muted); font-size: 0.75rem; }
 
