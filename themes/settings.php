@@ -532,7 +532,7 @@ function renderAppList() {
     var hasPages = enabledTotalPages > 1 || disabledTotalPages > 1 || enabledList.length > 10 || disabledList.length > 10;
     if (hasPages) {
         html += '<div style="text-align:right;padding-top:12px;font-size:0.75rem;color:var(--text-muted);font-family:var(--font-ui);">';
-        html += '每页 <select onchange="changeAppPageSize(this.value)" style="font-size:0.75rem;padding:2px 4px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);color:var(--text);margin:0 4px;">';
+        html += '每页 <select onchange="changeAppPageSize(this.value)" style="font-size:0.75rem;padding:2px 2px;width:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);color:var(--text);margin:0 4px;">';
         [10, 20, 50, 100].forEach(function(n) {
             html += '<option value="' + n + '"' + (appPageSize === n ? ' selected' : '') + '>' + n + '</option>';
         });
