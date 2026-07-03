@@ -2424,7 +2424,7 @@ function closeMinimalAiResult() {
 
 // ===== 表格编辑器 =====
 
-var _tbl = { rows: 5, cols: 5, hasHeader: true, striped: false, formulas: {}, textarea: null, selCells: [], mergedCells: [] };
+var _tbl = { rows: 5, cols: 5, hasHeader: true, striped: false, formulas: {}, textarea: null, selCells: [], mergedCells: [], history: [], historyIdx: -1, _historyMax: 80 };
 
 function colLetter(i) { var s = ''; while (i >= 0) { s = String.fromCharCode(65 + (i % 26)) + s; i = Math.floor(i / 26) - 1; } return s; }
 
@@ -2438,11 +2438,258 @@ function parseCellRef(ref) {
     return { r: parseInt(m[2]) - 1, c: c - 1 };
 }
 
+function tblSnapshotFull() {
+    var snap = tblSnapshot();
+    return {
+        rows: _tbl.rows,
+        cols: _tbl.cols,
+        hasHeader: _tbl.hasHeader,
+        striped: _tbl.striped,
+        cells: snap.cells,
+        formulas: JSON.parse(JSON.stringify(_tbl.formulas)),
+        mergedCells: _tbl.mergedCells.slice(),
+        selCells: _tbl.selCells.slice()
+    };
+}
+
+function tblRestoreSnapshot(snap) {
+    _tbl.rows = snap.rows;
+    _tbl.cols = snap.cols;
+    _tbl.hasHeader = snap.hasHeader;
+    _tbl.striped = snap.striped;
+    _tbl.formulas = JSON.parse(JSON.stringify(snap.formulas));
+    _tbl.mergedCells = snap.mergedCells.slice();
+    _tbl.selCells = snap.selCells.slice();
+    document.getElementById('tbl-striped').checked = _tbl.striped;
+    renderTblGridWithData(snap.cells);
+    updateTblSelHighlight();
+    updateTblSelInfo();
+}
+
+function tblPushHistory() {
+    // 截断 redo 历史
+    if (_tbl.historyIdx < _tbl.history.length - 1) {
+        _tbl.history = _tbl.history.slice(0, _tbl.historyIdx + 1);
+    }
+    _tbl.history.push(tblSnapshotFull());
+    if (_tbl.history.length > _tbl._historyMax) _tbl.history.shift();
+    _tbl.historyIdx = _tbl.history.length - 1;
+}
+
+function tblUndo() {
+    if (_tbl.historyIdx <= 0) return;
+    _tbl.historyIdx--;
+    tblRestoreSnapshot(_tbl.history[_tbl.historyIdx]);
+}
+
+function tblRedo() {
+    if (_tbl.historyIdx >= _tbl.history.length - 1) return;
+    _tbl.historyIdx++;
+    tblRestoreSnapshot(_tbl.history[_tbl.historyIdx]);
+}
+
+// 判断选中是否构成完整的行/列
+function tblIsFullRowSel() {
+    if (_tbl.selCells.length < _tbl.cols) return false;
+    var coords = _tbl.selCells.map(function(ref) { return parseCellRef(ref); }).filter(Boolean);
+    if (coords.length < _tbl.cols) return false;
+    var row = coords[0].r;
+    for (var i = 0; i < coords.length; i++) {
+        if (coords[i].r !== row) return false;
+    }
+    // 检查是否覆盖了整行的所有格（无hidden）
+    var seen = {};
+    for (var i = 0; i < coords.length; i++) { seen[coords[i].c] = true; }
+    for (var c = 0; c < _tbl.cols; c++) {
+        var td = document.querySelector('#table-editor-grid [data-ref="' + cellRef(row, c) + '"]');
+        if (td && td.getAttribute('data-hidden') !== '1' && !seen[c]) return false;
+    }
+    return true;
+}
+
+function tblIsFullColSel() {
+    if (_tbl.selCells.length < _tbl.rows) return false;
+    var coords = _tbl.selCells.map(function(ref) { return parseCellRef(ref); }).filter(Boolean);
+    if (coords.length < _tbl.rows) return false;
+    var col = coords[0].c;
+    for (var i = 0; i < coords.length; i++) {
+        if (coords[i].c !== col) return false;
+    }
+    var seen = {};
+    for (var i = 0; i < coords.length; i++) { seen[coords[i].r] = true; }
+    for (var r = 0; r < _tbl.rows; r++) {
+        var td = document.querySelector('#table-editor-grid [data-ref="' + cellRef(r, col) + '"]');
+        if (td && td.getAttribute('data-hidden') !== '1' && !seen[r]) return false;
+    }
+    return true;
+}
+
+// 获取按行列排序后的选中格，剔除 hidden
+function tblSortedSelCells() {
+    var list = [];
+    for (var i = 0; i < _tbl.selCells.length; i++) {
+        var ref = _tbl.selCells[i];
+        var td = document.querySelector('#table-editor-grid [data-ref="' + ref + '"]');
+        if (td && td.getAttribute('data-hidden') === '1') continue;
+        var p = parseCellRef(ref);
+        if (p) list.push({ ref: ref, r: p.r, c: p.c });
+    }
+    list.sort(function(a, b) { return a.r !== b.r ? a.r - b.r : a.c - b.c; });
+    return list;
+}
+
+function tblCopySelection() {
+    var sorted = tblSortedSelCells();
+    if (!sorted.length) return;
+
+    var isFullCol = tblIsFullColSel();
+    var isFullRow = tblIsFullRowSel();
+    var lines;
+
+    if (isFullRow) {
+        // 整行：Tab 分隔
+        lines = [];
+        var rowCells = sorted; // already filtered and sorted
+        var line = rowCells.map(function(s) { return getTblCellValue(s.ref); }).join('\t');
+        lines.push(line);
+    } else if (isFullCol) {
+        // 整列：每行一行
+        var colCells = sorted;
+        lines = colCells.map(function(s) { return getTblCellValue(s.ref); });
+    } else {
+        // 非整行整列：按选中格范围形成矩形
+        if (sorted.length === 1) {
+            lines = [getTblCellValue(sorted[0].ref)];
+        } else {
+            var minR = sorted[0].r, maxR = sorted[sorted.length - 1].r;
+            var minC = 999, maxC = 0;
+            for (var i = 0; i < sorted.length; i++) {
+                if (sorted[i].c < minC) minC = sorted[i].c;
+                if (sorted[i].c > maxC) maxC = sorted[i].c;
+            }
+            lines = [];
+            for (var r = minR; r <= maxR; r++) {
+                var rowVals = [];
+                for (var c = minC; c <= maxC; c++) {
+                    rowVals.push(getTblCellValue(cellRef(r, c)));
+                }
+                lines.push(rowVals.join('\t'));
+            }
+        }
+    }
+
+    navigator.clipboard.writeText(lines.join('\n')).catch(function() {
+        // Fallback: use textarea
+        var ta = document.createElement('textarea');
+        ta.value = lines.join('\n');
+        ta.style.position = 'fixed'; ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+    });
+}
+
+async function tblPasteFromClipboard() {
+    var text;
+    try {
+        text = await navigator.clipboard.readText();
+    } catch(e) {
+        return;
+    }
+    if (!text) return;
+
+    var lines = text.split(/\r?\n/);
+    // 判断是 TSV 还是纯文本
+    var hasTab = false;
+    for (var i = 0; i < lines.length; i++) {
+        if (lines[i].indexOf('\t') !== -1) { hasTab = true; break; }
+    }
+
+    if (!hasTab && lines.length === 1) {
+        // 纯文本单行 → 贴入当前选中格
+        for (var i = 0; i < _tbl.selCells.length; i++) {
+            var td = document.querySelector('#table-editor-grid [data-ref="' + _tbl.selCells[i] + '"]');
+            if (td) td.textContent = lines[0];
+        }
+        return;
+    }
+
+    // TSV 或多行 → 以第一个选中格为起始点展开粘贴
+    if (!_tbl.selCells.length) return;
+    var baseP = parseCellRef(_tbl.selCells[0]);
+    if (!baseP) return;
+    var startR = baseP.r, startC = baseP.c;
+
+    tblPushHistory();
+
+    for (var r = 0; r < lines.length; r++) {
+        var cols = hasTab ? lines[r].split('\t') : [lines[r]];
+        for (var c = 0; c < cols.length; c++) {
+            var ref = cellRef(startR + r, startC + c);
+            // 超出表格范围则自动扩展
+            if (startR + r >= _tbl.rows) _tbl.rows = startR + r + 1;
+            if (startC + c >= _tbl.cols) _tbl.cols = startC + c + 1;
+            var td = document.querySelector('#table-editor-grid [data-ref="' + ref + '"]');
+            if (td && td.getAttribute('data-hidden') !== '1') {
+                td.textContent = cols[c] || '';
+            }
+        }
+    }
+
+    // 如果行列数变了，重建以更新 data-ref
+    if (startR + lines.length > _tbl.rows - 1 || startC + (lines[0].split('\t').length) > _tbl.cols - 1) {
+        // 已经在上面的循环中更新了 _tbl.rows/_tbl.cols
+        var snap = tblSnapshot();
+        _tbl.rows = Math.max(_tbl.rows, startR + lines.length);
+        _tbl.cols = Math.max(_tbl.cols, startC + (hasTab ? lines[0].split('\t').length : 1));
+        tblRestoreWithShift(snap, -1, -1, 0, false); // just re-render with correct dimensions
+        // Actually let's just rebuild
+        renderTblGridWithData(snap.cells);
+    }
+}
+
+// 键盘快捷键
+function tblOnKeyDown(e) {
+    var ctrl = e.ctrlKey || e.metaKey;
+
+    if (ctrl && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        tblUndo();
+        return;
+    }
+    if (ctrl && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        tblRedo();
+        return;
+    }
+    if (ctrl && e.key === 'c') {
+        // 如果焦点在公式栏，不拦截
+        if (document.activeElement === document.getElementById('tbl-formula-input')) return;
+        if (_tbl.selCells.length > 0) {
+            e.preventDefault();
+            tblCopySelection();
+            return;
+        }
+    }
+    if (ctrl && e.key === 'v') {
+        if (document.activeElement === document.getElementById('tbl-formula-input')) return;
+        if (_tbl.selCells.length > 0) {
+            e.preventDefault();
+            tblPasteFromClipboard();
+            return;
+        }
+    }
+}
+
 function openTableEditor(textarea) {
     _tbl.textarea = textarea;
     _tbl.selCells = [];
     _tbl.mergedCells = [];
     _tbl.editRange = null;
+    _tbl.history = [];
+    _tbl.historyIdx = -1;
+    _tbl._cellEditTimeout = null;
     document.getElementById('tbl-formula-input').value = '';
     document.getElementById('tbl-formula-result').style.display = 'none';
 
@@ -2450,7 +2697,6 @@ function openTableEditor(textarea) {
     var existing = findTableAtCursor(textarea);
     if (existing) {
         if (!parseTableFromHTML(existing.html)) {
-            // 解析失败，回退到新建
             initFreshTable();
         } else {
             _tbl.editRange = { start: existing.start, end: existing.end };
@@ -2461,7 +2707,14 @@ function openTableEditor(textarea) {
 
     document.getElementById('table-editor-modal').style.display = 'flex';
     document.getElementById('tbl-striped').checked = _tbl.striped;
+
+    // 挂载键盘快捷键
+    var modal = document.getElementById('table-editor-modal');
+    modal.removeEventListener('keydown', tblOnKeyDown);
+    modal.addEventListener('keydown', tblOnKeyDown);
+
     renderTblGrid();
+    tblPushHistory(); // 初始快照，作为 undo 底
 }
 
 function initFreshTable() {
@@ -2624,6 +2877,7 @@ function renderTblGrid() {
 }
 
 function tblOnCellFocus(td) {
+    _tbl._cellEditOrig = td.textContent;
     var ref = td.dataset.ref;
     var input = document.getElementById('tbl-formula-input');
     var formula = _tbl.formulas[ref];
@@ -2636,7 +2890,16 @@ function tblOnCellFocus(td) {
 }
 
 function tblOnCellBlur(td) {
-    // Save cell content on blur
+    if (_tbl._cellEditTimeout) clearTimeout(_tbl._cellEditTimeout);
+    var newVal = td.textContent;
+    if (_tbl._cellEditOrig !== undefined && _tbl._cellEditOrig !== newVal) {
+        // 延迟 push，避免连续编辑产生过多历史
+        _tbl._cellEditTimeout = setTimeout(function() {
+            tblPushHistory();
+            _tbl._cellEditTimeout = null;
+        }, 400);
+    }
+    _tbl._cellEditOrig = undefined;
 }
 
 function tblOnCellMouseDown(e, td) {
@@ -2844,6 +3107,7 @@ function tblGatherTableData() {
 // 对多个选中格批量套用公式，自动偏移引用
 async function tblBulkApply(formula) {
     if (_tbl.selCells.length < 2) return;
+    tblPushHistory();
     var baseRef = _tbl.selCells[0];
     var baseP = parseCellRef(baseRef);
     if (!baseP) return;
@@ -2896,6 +3160,7 @@ async function tblBulkApply(formula) {
 }
 
 async function tblEvalFormula() {
+    tblPushHistory();
     var input = document.getElementById('tbl-formula-input');
     var formula = input.value.trim();
     if (!formula) return;
@@ -3028,6 +3293,7 @@ function renderTblGridWithData(cellData) {
 }
 
 function tblAddRow() {
+    tblPushHistory();
     var snap = tblSnapshot();
     // 有选中格 → 在其所在行下方插入；否则在末尾追加
     var insertAfter = _tbl.rows - 1; // default: end
@@ -3040,6 +3306,7 @@ function tblAddRow() {
 }
 
 function tblAddCol() {
+    tblPushHistory();
     var snap = tblSnapshot();
     var insertAfter = _tbl.cols - 1;
     if (_tbl.selCells.length > 0) {
@@ -3052,6 +3319,7 @@ function tblAddCol() {
 
 function tblDelRow() {
     if (_tbl.rows <= 1) return;
+    tblPushHistory();
     var target = _tbl.rows - 1; // default: last row
     if (_tbl.selCells.length > 0) {
         var p = parseCellRef(_tbl.selCells[0]);
@@ -3064,6 +3332,7 @@ function tblDelRow() {
 
 function tblDelCol() {
     if (_tbl.cols <= 1) return;
+    tblPushHistory();
     var target = _tbl.cols - 1;
     if (_tbl.selCells.length > 0) {
         var p = parseCellRef(_tbl.selCells[0]);
@@ -3080,6 +3349,7 @@ function renderTblGrid() {
 }
 
 function tblToggleHeader() {
+    tblPushHistory();
     _tbl.hasHeader = !_tbl.hasHeader;
     renderTblGrid();
 }
@@ -3097,6 +3367,7 @@ function tblToggleStriped() {
 
 function tblMergeCells() {
     if (_tbl.selCells.length < 2) { alert('请按住 Ctrl/Shift 多选至少 2 个相邻单元格'); return; }
+    tblPushHistory();
 
     // Parse refs into coordinates
     var coords = [];
@@ -3139,6 +3410,7 @@ function tblMergeCells() {
 
 function tblSplitCell() {
     if (_tbl.selCells.length !== 1) { alert('请选中一个已合并的单元格进行拆分'); return; }
+    tblPushHistory();
     var ref = _tbl.selCells[0];
     var td = document.querySelector('#table-editor-grid [data-ref="' + ref + '"]');
     if (!td) return;
@@ -3169,6 +3441,7 @@ function tblSplitCell() {
 
 function tblSetAlign(align) {
     if (_tbl.selCells.length === 0) { alert('请先选中单元格'); return; }
+    tblPushHistory();
     for (var i = 0; i < _tbl.selCells.length; i++) {
         var td = document.querySelector('#table-editor-grid [data-ref="' + _tbl.selCells[i] + '"]');
         if (td) td.style.textAlign = align;
