@@ -428,6 +428,93 @@ $router->post('/api/ai/continue', 'handle_ai_continue');
 $router->post('/api/ai/suggest-tags', 'handle_ai_suggest_tags');
 $router->post('/api/ai/suggest-title', 'handle_ai_suggest_title');
 $router->post('/api/ai/highlights', 'handle_ai_highlights');
+
+// ==================== API: 表格公式计算 ====================
+
+$router->post('/api/table/calc', function() {
+    require_login();
+    $data = body_json();
+    $table = $data['table'] ?? [];
+    $formula = trim($data['formula'] ?? '');
+    $cell = $data['cell'] ?? '';
+    $cells = $data['cells'] ?? [];
+    $has_header = $data['has_header'] ?? false;
+
+    if (empty($formula)) json_response(['error' => '请输入公式或自然语言描述'], 400);
+    if (empty($table)) json_response(['error' => '表格数据为空'], 400);
+
+    // 列标签生成（支持 A-Z, AA-ZZ）
+    $col_labels = [];
+    $col_count = count($table[0] ?? []);
+    for ($c = 0; $c < $col_count; $c++) {
+        $label = '';
+        $n = $c;
+        while ($n >= 0) {
+            $label = chr(65 + ($n % 26)) . $label;
+            $n = intdiv($n, 26) - 1;
+        }
+        $col_labels[] = $label;
+    }
+
+    // 构建表格文本表示
+    $table_text = '';
+    $table_text .= '     | ' . implode(' | ', $col_labels) . " |\n";
+    $table_text .= '-----|' . str_repeat('---|', $col_count) . "\n";
+    foreach ($table as $r => $row) {
+        $table_text .= '  ' . ($r + 1) . '  | ' . implode(' | ', $row) . " |\n";
+    }
+
+    $is_formula = (strpos($formula, '=') === 0);
+    $is_nl = !$is_formula;
+
+    if ($is_nl) {
+        // 自然语言：LLM 理解用户意图后返回结果
+        $cells_text = '';
+        if (!empty($cells)) {
+            $cells_text = "目标单元格：" . implode(', ', $cells) . "\n请为每个单元格分别计算，返回 values 对象。\n";
+        } else {
+            $cells_text = "目标单元格：{$cell}\n";
+        }
+        $prompt = "你是一个表格计算助手。用户用自然语言描述了一个计算需求，你需要理解意图并完成计算。\n\n";
+        $prompt .= "表格数据（行号+列标显示）：\n{$table_text}\n\n";
+        $prompt .= "用户需求：{$formula}\n";
+        $prompt .= $cells_text;
+        if ($has_header) $prompt .= "注意：第1行是表头行，不参与数值计算。\n\n";
+        if (!empty($cells) && count($cells) > 1) {
+            $prompt .= "返回严格JSON：{\"values\": {\"A1\": 计算结果, \"A2\": 计算结果, ...}, \"explanation\": \"20字内说明\"}\n只输出JSON。";
+        } else {
+            $prompt .= "返回严格JSON：{\"value\": 计算结果（数字或字符串）, \"explanation\": \"20字内说明\"}\n只输出JSON。";
+        }
+    } else {
+        // 公式：直接计算
+        $prompt = "你是一个表格计算助手。用户有一个表格，需要在单元格 {$cell} 中填入公式 {$formula} 的计算结果。\n\n";
+        $prompt .= "请根据表格数据计算该公式的值。支持 SUM/AVG/COUNT/MAX/MIN 等聚合函数，以及四则运算。\n";
+        $prompt .= "如果数据不足以计算（如引用了空单元格或无效引用），请返回合理的错误提示。\n\n";
+        $prompt .= "表格数据（行号+列标显示）：\n{$table_text}\n\n";
+        $prompt .= "公式：{$formula}\n单元格：{$cell}\n\n";
+        if ($has_header) $prompt .= "注意：第1行是表头行，不参与计算。\n\n";
+        $prompt .= "返回严格JSON：{\"value\": 计算结果（数字或字符串）, \"explanation\": \"15字内简要说明\"}\n只输出JSON。";
+    }
+
+    $result = call_deepseek($prompt, '', 0.3, 1024);
+
+    if (isset($result['error'])) {
+        json_response(['error' => '计算失败: ' . $result['error']], 500);
+    }
+
+    $parsed = parse_ai_json($result['text'] ?? '');
+    if ($parsed) {
+        if (isset($parsed['values'])) {
+            json_response($parsed);
+        } elseif (isset($parsed['value'])) {
+            json_response($parsed);
+        } else {
+            json_response(['value' => '#ERROR', 'explanation' => '无法解析计算结果']);
+        }
+    } else {
+        json_response(['value' => '#ERROR', 'explanation' => 'AI 返回格式异常']);
+    }
+});
 $router->post('/api/ai/generate-template', 'handle_ai_generate_template');
 $router->get('/api/ai/templates', 'handle_ai_list_templates');
 $router->post('/api/ai/templates/reorder', 'handle_ai_reorder_templates');
@@ -608,7 +695,7 @@ $router->post('/api/insights/apps/generate', function() {
 EOS;
 
     $result = call_deepseek(
-        "你是一个应用分析专家。用户描述了一个洞见分析需求，你需要生成应用元数据和给 AI 的分析提示词。\n\n## 核心规则（极其重要）\n\n你的 analysis_prompt 将被直接传给 DeepSeek 执行分析。因此**analysis_prompt 必须是自包含的完整提示词**：\n1. 在 analysis_prompt 开头写清楚分析视角和方法\n2. **在 analysis_prompt 末尾，必须把下面「对应布局的输出 JSON 格式规范」原样粘贴进去**\n3. 末尾务必加上「只输出JSON，不要其他文字」\n\n## 可用布局及输出规范（选择其一，将其规范嵌入 analysis_prompt）\n\n{$specs_text}\n\n{$template_opts_spec}\n\n## 常用分析领域参考\n- 自我剖析：识别个人模式、盲区、价值观、成长轨迹（推荐 cards/mixed/mindmap）\n- 趋势分析：发现情绪、行为、关注点的变化趋势（推荐 line/mixed/calendar）\n- 节点总结：提炼关键转折点、里程碑事件和重要决定（推荐 timeline/report/mixed）\n- 报告生成：综合多维度分析和可视化，生成结构化报告（推荐 report/mixed）\n\n根据用户需求「{$description}」：\n1. 参考上述分析领域，从布局中选择最合适的一个\n2. 编写 analysis_prompt = 分析方法说明 + 你选中的那个布局的输出规范原文 + 「只输出JSON，不要其他文字」\n3. 根据应用特点选择 template_opts（input_type 可以是字符串或数组如 [scope, keyword]，可用值: scope/article_picker/tag_filter/keyword/question/date_range/none，让多个控件共存 + features + style），让交互体验贴合功能\n\n返回严格的 JSON（不要带注释）：\n{\n  \"name\": \"应用名称（2-6字）\",\n  \"description\": \"20-50字的功能说明\",\n  \"analysis_prompt\": \"自包含的完整提示词\",\n  \"result_layout\": \"cards|list|mixed|timeline|mindmap|wordcloud|line|calendar|report\",\n  \"template_opts\": {\n    \"input_type\": \"scope|article_picker|tag_filter|keyword|question|date_range|none（或数组如 [scope, keyword]）\",\n    \"features\": [\"surprise\"],\n    \"style\": \"default|minimal|explorer\"\n  }\n}\n\n只输出 JSON，不要其他文字。",
+        "你是一个应用分析专家。用户描述了一个洞见分析需求，你需要生成应用元数据和给 AI 的分析提示词。\n\n## 核心规则（极其重要）\n\n你的 analysis_prompt 将被直接传给 DeepSeek 执行分析。因此**analysis_prompt 必须是自包含的完整提示词**：\n1. 在 analysis_prompt 开头写清楚分析视角和方法\n2. 可在 prompt 中使用占位符引用用户输入的值：{{keyword}}（对应关键词输入框）、{{question}}（对应开放问题输入框）、{{scope}}（对应文章范围）、{{date_start}}/{{date_end}}（对应日期范围）。如果应用没有对应的输入组件，就不要使用该占位符（否则会是空值）\n3. **在 analysis_prompt 末尾，必须把下面「对应布局的输出 JSON 格式规范」原样粘贴进去**\n4. 末尾务必加上「只输出JSON，不要其他文字」\n\n## 可用布局及输出规范（选择其一，将其规范嵌入 analysis_prompt）\n\n{$specs_text}\n\n{$template_opts_spec}\n\n## 常用分析领域参考\n- 自我剖析：识别个人模式、盲区、价值观、成长轨迹（推荐 cards/mixed/mindmap）\n- 趋势分析：发现情绪、行为、关注点的变化趋势（推荐 line/mixed/calendar）\n- 节点总结：提炼关键转折点、里程碑事件和重要决定（推荐 timeline/report/mixed）\n- 报告生成：综合多维度分析和可视化，生成结构化报告（推荐 report/mixed）\n\n根据用户需求「{$description}」：\n1. 参考上述分析领域，从布局中选择最合适的一个\n2. 编写 analysis_prompt = 分析方法说明 + 你选中的那个布局的输出规范原文 + 「只输出JSON，不要其他文字」。如果 template_opts 中选了 keyword 或 question，prompt 中应使用 {{keyword}} 或 {{question}} 来引用用户输入。\n3. 根据应用特点选择 template_opts（input_type 可以是字符串或数组如 [scope, keyword]，可用值: scope/article_picker/tag_filter/keyword/question/date_range/none，让多个控件共存 + features + style），让交互体验贴合功能\n\n返回严格的 JSON（不要带注释）：\n{\n  \"name\": \"应用名称（2-6字）\",\n  \"description\": \"20-50字的功能说明\",\n  \"analysis_prompt\": \"自包含的完整提示词\",\n  \"result_layout\": \"cards|list|mixed|timeline|mindmap|wordcloud|line|calendar|report\",\n  \"template_opts\": {\n    \"input_type\": \"scope|article_picker|tag_filter|keyword|question|date_range|none（或数组如 [scope, keyword]）\",\n    \"features\": [\"surprise\"],\n    \"style\": \"default|minimal|explorer\"\n  }\n}\n\n只输出 JSON，不要其他文字。",
         $description,
         0.7,
         2048
@@ -751,6 +838,13 @@ $router->post('/api/insights/run/{id}', function($id) {
     $date_start = $data['date_start'] ?? '';
     $date_end = $data['date_end'] ?? '';
     $depth = intval($data['depth'] ?? 2);
+
+    // 替换提示词中的占位符，让用户可在 prompt 中引用输入组件的值
+    $prompt = str_replace(
+        ['{{keyword}}', '{{question}}', '{{scope}}', '{{date_start}}', '{{date_end}}'],
+        [$keyword, $question, $scope, $date_start, $date_end],
+        $prompt
+    );
 
     // 惊喜模式：随机选一篇文章
     if ($mode === 'surprise') {

@@ -4,7 +4,21 @@
 
 let _previewSyncEnabled = true;
 
+// 本地 esc 回退（防止 app.js 未加载时的竞态）
+var _escDiv;
+function esc(s) {
+    if (!_escDiv) _escDiv = document.createElement('div');
+    _escDiv.textContent = s || '';
+    return _escDiv.innerHTML;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    if (window.editorMode === 'minimal') {
+        initMinimalEditor();
+        initUpload();
+        initArticleRef();
+        return;
+    }
     initEditor();
     initAI();
     initUpload();
@@ -359,16 +373,7 @@ function toolbarAction(textarea, action) {
             return;
         case 'code': before = '\n```\n'; after = '\n```\n'; break;
         case 'table':
-            const rows = parseInt(prompt('表格行数：', '3'));
-            if (!rows || rows < 1) return;
-            const cols = parseInt(prompt('表格列数：', '3'));
-            if (!cols || cols < 1) return;
-            let tableMd = '\n| ' + Array(cols).fill('  标题').join(' | ') + ' |\n';
-            tableMd += '| ' + Array(cols).fill(' --- ').join(' | ') + ' |\n';
-            for (let r = 1; r < rows; r++) {
-                tableMd += '| ' + Array(cols).fill('  内容').join(' | ') + ' |\n';
-            }
-            doReplace(textarea, tableMd, start, end, start + tableMd.length);
+            openTableEditor(textarea);
             return;
         case 'hr': before = '\n---\n'; break;
         case 'indent':
@@ -462,7 +467,7 @@ function showColorPicker(textarea, sel, start, end) {
     _colorPicker = div;
 
     const closeCP = (e) => { if (!div.contains(e.target) && e.target !== textarea) { div.remove(); _colorPicker = null; document.removeEventListener('click', closeCP); } };
-    setTimeout(() => document.addEventListener('click', closeCP), 0);
+    setTimeout(() => document.addEventListener('click', closeCP), 150);
 }
 
 function applyColor(textarea, color, sel, start, end, pickerDiv) {
@@ -541,7 +546,7 @@ function showHexPicker(textarea, start, end) {
     _hexPicker = div;
 
     const closeCP = (e) => { if (!div.contains(e.target) && e.target !== textarea) { div.remove(); _hexPicker = null; document.removeEventListener('click', closeCP); } };
-    setTimeout(() => document.addEventListener('click', closeCP), 0);
+    setTimeout(() => document.addEventListener('click', closeCP), 150);
 }
 
 function applyHexColor(textarea, color, start, end, pickerDiv) {
@@ -1932,3 +1937,1295 @@ window.addEventListener('resize', () => {
 function toggleSyncScroll() {
     _previewSyncEnabled = document.getElementById('sync-scroll-toggle').checked;
 }
+
+// ===== 极简编辑器 =====
+
+let _minimalAiResultText = '';
+let _mdBlocks = []; // {source, type} 逐行管理的 markdown 块
+
+function initMinimalEditor() {
+    var toggleEdit = document.getElementById('minimal-toggle-edit');
+    var toggleView = document.getElementById('minimal-toggle-view');
+    var textarea = document.getElementById('article-content');
+    var preview = document.getElementById('minimal-preview');
+    var editorArea = document.getElementById('minimal-editor-area');
+
+    if (!textarea || !preview) return;
+
+    // 按 marked lexer 拆分 Markdown 为块
+    function splitToBlocks(md) {
+        if (typeof marked !== 'undefined' && typeof marked.lexer === 'function') {
+            var tokens = marked.lexer(md);
+            var blocks = [];
+            for (var i = 0; i < tokens.length; i++) {
+                var t = tokens[i];
+                if (t.type === 'space') continue;
+                blocks.push({ source: t.raw, type: t.type });
+            }
+            return blocks;
+        }
+        var parts = md.split(/\n\n+/);
+        var blocks = [];
+        for (var j = 0; j < parts.length; j++) {
+            var p = parts[j];
+            if (p.trim()) blocks.push({ source: p, type: 'paragraph' });
+        }
+        return blocks;
+    }
+
+    function renderBlockPreview() {
+        var md = textarea.value;
+        if (!md.trim()) {
+            preview.innerHTML = '<p style="color:var(--text-muted)">暂无内容</p>';
+            _mdBlocks = [];
+            return;
+        }
+        if (typeof marked === 'undefined') {
+            preview.innerHTML = '<p style="color:var(--text-muted)">Markdown 渲染库加载中...</p>';
+            return;
+        }
+
+        _mdBlocks = splitToBlocks(md);
+        var html = '';
+        for (var i = 0; i < _mdBlocks.length; i++) {
+            var blockHtml;
+            try {
+                blockHtml = marked.parse(_mdBlocks[i].source);
+            } catch (e) {
+                blockHtml = '<p>' + esc(_mdBlocks[i].source) + '</p>';
+            }
+            html += '<div class="md-block" data-block-idx="' + i + '">' + blockHtml + '</div>';
+        }
+        preview.innerHTML = html;
+    }
+
+    function showEdit() {
+        textarea.style.display = '';
+        preview.style.display = 'none';
+        if (toggleEdit) toggleEdit.classList.add('active');
+        if (toggleView) toggleView.classList.remove('active');
+        textarea.focus();
+    }
+
+    function showPreview() {
+        renderBlockPreview();
+        textarea.style.display = 'none';
+        preview.style.display = '';
+        if (toggleView) toggleView.classList.add('active');
+        if (toggleEdit) toggleEdit.classList.remove('active');
+    }
+    if (toggleEdit) toggleEdit.addEventListener('click', showEdit);
+    if (toggleView) toggleView.addEventListener('click', showPreview);
+
+    // Tab 键缩进
+    textarea.addEventListener('keydown', function(e) {
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            var start = textarea.selectionStart;
+            var end = textarea.selectionEnd;
+            if (start !== end) {
+                var before = textarea.value.substring(0, start);
+                var sel = textarea.value.substring(start, end);
+                var after = textarea.value.substring(end);
+                var lines = sel.split('\n');
+                var indented = lines.map(function(l) { return '    ' + l; }).join('\n');
+                doReplace(textarea, indented, start, end, start + indented.length);
+            } else {
+                doReplace(textarea, '    ', start, end, start + 4);
+            }
+        }
+    });
+
+    // marked 加载等待
+    if (typeof marked === 'undefined') {
+        var retries = 0;
+        var waitMarked = setInterval(function() {
+            retries++;
+            if (typeof marked !== 'undefined') {
+                clearInterval(waitMarked);
+                if (preview.style.display !== 'none') renderBlockPreview();
+            } else if (retries > 30) {
+                clearInterval(waitMarked);
+            }
+        }, 200);
+    }
+
+    // 文章选项抽屉
+    var metaBtn = document.getElementById('minimal-meta-btn');
+    var metaDrawer = document.getElementById('minimal-meta-drawer');
+    if (metaBtn && metaDrawer) {
+        metaBtn.addEventListener('click', function() {
+            metaDrawer.style.display = metaDrawer.style.display === 'none' ? '' : 'none';
+        });
+    }
+
+    // AI FAB → 打开/关闭 AI 面板
+    var aiFab = document.getElementById('minimal-ai-fab');
+    var aiPanel = document.getElementById('minimal-ai-panel');
+    var aiClose = document.getElementById('minimal-ai-close');
+    if (aiFab && aiPanel) {
+        aiFab.addEventListener('click', function() {
+            if (aiPanel.style.display === 'none' || !aiPanel.style.display) {
+                aiPanel.style.display = '';
+                var msgs = document.getElementById('minimal-ai-messages');
+                if (msgs) msgs.scrollTop = msgs.scrollHeight;
+            } else {
+                aiPanel.style.display = 'none';
+            }
+        });
+    }
+    if (aiClose && aiPanel) {
+        aiClose.addEventListener('click', function() {
+            aiPanel.style.display = 'none';
+        });
+    }
+
+    // 自动保存 & 草稿恢复
+    restoreDraft();
+    setInterval(function() {
+        if (editorDirty && textarea.value !== lastAutoSaveContent) {
+            saveDraft();
+            lastAutoSaveContent = textarea.value;
+            editorDirty = false;
+        }
+    }, 30000);
+    window.addEventListener('beforeunload', function() { saveDraft(); });
+    textarea.addEventListener('input', function() { editorDirty = true; });
+
+    // 拖拽上传
+    var dragCounter = 0;
+    editorArea.addEventListener('dragenter', function(e) {
+        e.preventDefault();
+        dragCounter++;
+        editorArea.style.background = 'var(--accent-light)';
+    });
+    editorArea.addEventListener('dragleave', function() {
+        dragCounter--;
+        if (dragCounter <= 0) {
+            dragCounter = 0;
+            editorArea.style.background = '';
+        }
+    });
+    editorArea.addEventListener('dragover', function(e) { e.preventDefault(); });
+    editorArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dragCounter = 0;
+        editorArea.style.background = '';
+        uploadFiles(Array.from(e.dataTransfer.files));
+    });
+
+    // ===== 右键上下文菜单 =====
+    var ctxMenu = document.createElement('div');
+    ctxMenu.className = 'minimal-ctx-menu';
+    ctxMenu.id = 'minimal-ctx-menu';
+    ctxMenu.style.display = 'none';
+    document.body.appendChild(ctxMenu);
+
+    var ctxActions = [
+        { label: '粗体', action: 'bold', kbd: 'B' },
+        { label: '斜体', action: 'italic', kbd: 'I' },
+        { label: '删除线', action: 'strikethrough', kbd: 'S' },
+        null,
+        { label: '标题', action: 'heading', kbd: 'H2' },
+        { label: '引用', action: 'quote' },
+        null,
+        { label: '无序列表', action: 'ul' },
+        { label: '有序列表', action: 'ol' },
+        { label: '任务清单', action: 'checklist' },
+        null,
+        { label: '链接', action: 'link' },
+        { label: '图片', action: 'image' },
+        { label: '代码', action: 'code' },
+        { label: '表格', action: 'table' },
+        { label: '分割线', action: 'hr' },
+        null,
+        { label: '缩进', action: 'indent' },
+        { label: '文字颜色', action: 'color' },
+    ];
+
+    function buildCtxMenu() {
+        var html = '';
+        for (var i = 0; i < ctxActions.length; i++) {
+            var item = ctxActions[i];
+            if (!item) { html += '<div class="ctx-sep"></div>'; continue; }
+            html += '<button class="ctx-item" data-action="' + item.action + '">' +
+                '<span>' + item.label + '</span>' +
+                (item.kbd ? '<kbd>' + item.kbd + '</kbd>' : '') +
+            '</button>';
+        }
+        ctxMenu.innerHTML = html;
+
+        // 绑事件
+        var btns = ctxMenu.querySelectorAll('.ctx-item');
+        for (var b = 0; b < btns.length; b++) {
+            btns[b].addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                handleCtxAction(this.dataset.action);
+            });
+        }
+    }
+    buildCtxMenu();
+
+    function showCtxMenu(x, y) {
+        // 确保菜单不超出视口
+        var mw = 200;
+        var mh = ctxActions.length * 34;
+        if (x + mw > window.innerWidth) x = window.innerWidth - mw - 8;
+        if (y + mh > window.innerHeight) y = window.innerHeight - mh - 8;
+        if (x < 8) x = 8;
+        if (y < 8) y = 8;
+        ctxMenu.style.left = x + 'px';
+        ctxMenu.style.top = y + 'px';
+        ctxMenu.style.display = '';
+    }
+
+    function hideCtxMenu() {
+        ctxMenu.style.display = 'none';
+    }
+
+    function handleCtxAction(action) {
+        hideCtxMenu();
+        // 预览模式：切到编辑模式再执行
+        if (preview.style.display !== 'none') {
+            preview.style.display = 'none';
+            textarea.style.display = '';
+            if (toggleEdit) toggleEdit.classList.add('active');
+            if (toggleView) toggleView.classList.remove('active');
+        }
+        textarea.focus();
+        toolbarAction(textarea, action);
+        textarea.dispatchEvent(new Event('input'));
+    }
+
+    // 右键事件
+    textarea.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+        showCtxMenu(e.clientX, e.clientY);
+    });
+
+    preview.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+        // 确保右键目标在内容块上时保留原生选区
+        showCtxMenu(e.clientX, e.clientY);
+    });
+
+    // 点击其他区域关闭
+    document.addEventListener('click', function(e) {
+        if (!ctxMenu.contains(e.target)) hideCtxMenu();
+    });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') hideCtxMenu();
+    });
+}
+
+function minimalAddMsg(role, content) {
+    var container = document.getElementById('minimal-ai-messages');
+    if (!container) return;
+    var div = document.createElement('div');
+    div.className = 'ai-msg ' + role;
+    div.textContent = content;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+
+// 获取当前应发给 AI 的文本：选区优先（预览选区或 textarea 选区），否则全文
+function getMinimalAiText() {
+    var preview = document.getElementById('minimal-preview');
+    // 1. 预览可见 → 检查预览中的选区
+    if (preview && preview.style.display !== 'none') {
+        var sel = window.getSelection();
+        if (sel && sel.rangeCount > 0 && sel.toString().trim()) {
+            var range = sel.getRangeAt(0);
+            if (preview.contains(range.commonAncestorContainer)) {
+                return { text: sel.toString(), hasSelection: true };
+            }
+        }
+    }
+    // 2. 编辑模式 → 检查 textarea 中的选区
+    var textarea = document.getElementById('article-content');
+    if (textarea) {
+        var start = textarea.selectionStart;
+        var end = textarea.selectionEnd;
+        if (start !== end) {
+            var selText = textarea.value.substring(start, end);
+            if (selText.trim()) {
+                return { text: selText, hasSelection: true };
+            }
+        }
+        return { text: textarea.value, hasSelection: false };
+    }
+    return { text: '', hasSelection: false };
+}
+
+function minimalShowResult(label, text) {
+    _minimalAiResultText = text;
+    document.getElementById('minimal-ai-result-label').textContent = label || 'AI 结果';
+    document.getElementById('minimal-ai-result-body').textContent = text;
+    document.getElementById('minimal-ai-result').style.display = '';
+}
+
+async function minimalAiAction(action) {
+    var ctx = getMinimalAiText();
+    if (!ctx.text.trim()) { alert('请先书写内容'); return; }
+
+    var body = { text: ctx.text };
+    var label = action;
+    var scopeLabel = ctx.hasSelection ? '选中文字（' + ctx.text.length + ' 字）' : '全文';
+
+    if (action === 'style') {
+        var style = prompt('请选择写作风格：\n\n可选：文学优美、简洁精炼、学术严谨、随笔随性、口语化', '文学优美');
+        if (!style) return;
+        body = { text: ctx.text, style: style.trim() };
+        label = '风格切换（' + style.trim() + '）';
+    } else if (action === 'summary') {
+        label = '生成摘要';
+    } else if (action === 'polish') {
+        label = '润色';
+    }
+
+    minimalAddMsg('user', '[' + label + '] ' + scopeLabel + '...');
+    minimalAddMsg('system', '处理中...');
+
+    try {
+        var resp = await fetch('/api/ai/' + action, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify(body)
+        });
+        var result = await resp.json();
+
+        var sysMsgs = document.querySelectorAll('#minimal-ai-messages .ai-msg.system');
+        sysMsgs.forEach(function(m) { if (m.textContent === '处理中...') m.remove(); });
+
+        if (result.text || result.result) {
+            var output = result.text || result.result;
+            minimalAddMsg('assistant', output);
+            minimalShowResult(label, output);
+        } else if (result.error) {
+            minimalAddMsg('system', '错误: ' + result.error);
+        }
+    } catch (err) {
+        var errMsgs = document.querySelectorAll('#minimal-ai-messages .ai-msg.system');
+        errMsgs.forEach(function(m) { if (m.textContent === '处理中...') m.remove(); });
+        minimalAddMsg('system', '请求失败: ' + err.message);
+    }
+}
+
+async function minimalAiContinue() {
+    var ctx = getMinimalAiText();
+    if (!ctx.text.trim()) { alert('请先书写内容'); return; }
+
+    var msgs = document.getElementById('minimal-ai-messages');
+    var wrapper = document.createElement('div');
+    wrapper.className = 'ai-msg-wrapper';
+    wrapper.id = 'minimal-continue-prompt';
+    wrapper.innerHTML = '<div class="ai-msg assistant">' +
+        '<div style="font-weight:500;margin-bottom:6px;">续写方向：</div>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+            '<button class="btn btn-sm btn-primary" onclick="minimalDoContinue(\'继续写下去\')">继续写下去</button>' +
+            '<button class="btn btn-sm" onclick="minimalDoContinue(\'换个角度写\')">换个角度写</button>' +
+            '<button class="btn btn-sm" onclick="minimalDoContinue(\'总结收尾\')">总结收尾</button>' +
+        '</div>' +
+    '</div>';
+    msgs.appendChild(wrapper);
+    msgs.scrollTop = msgs.scrollHeight;
+}
+
+async function minimalDoContinue(direction) {
+    var promptEl = document.getElementById('minimal-continue-prompt');
+    if (promptEl) promptEl.remove();
+
+    var ctx = getMinimalAiText();
+    var scopeLabel = ctx.hasSelection ? '选中文字（' + ctx.text.length + ' 字）' : '全文';
+
+    minimalAddMsg('user', '[续写] ' + direction + ' · ' + scopeLabel);
+    minimalAddMsg('system', '续写中...');
+
+    try {
+        var resp = await fetch('/api/ai/continue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ context: ctx.text, direction: direction })
+        });
+        var result = await resp.json();
+
+        var sysMsgs = document.querySelectorAll('#minimal-ai-messages .ai-msg.system');
+        sysMsgs.forEach(function(m) { if (m.textContent === '续写中...') m.remove(); });
+
+        if (result.text) {
+            minimalAddMsg('assistant', result.text);
+            minimalShowResult('续写（' + direction + '）', result.text);
+        } else if (result.error) {
+            minimalAddMsg('system', '错误: ' + result.error);
+        }
+    } catch (err) {
+        var errMsgs = document.querySelectorAll('#minimal-ai-messages .ai-msg.system');
+        errMsgs.forEach(function(m) { if (m.textContent === '续写中...') m.remove(); });
+        minimalAddMsg('system', '请求失败: ' + err.message);
+    }
+}
+
+async function minimalAiChat() {
+    var input = document.getElementById('minimal-ai-input');
+    var question = input.value.trim();
+    if (!question) return;
+
+    var ctx = getMinimalAiText();
+    var scopeNote = ctx.hasSelection ? ' [选中 ' + ctx.text.length + ' 字]' : '';
+
+    minimalAddMsg('user', question + scopeNote);
+    input.value = '';
+    minimalAddMsg('system', '思考中...');
+
+    try {
+        var resp = await fetch('/api/ai/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ question: question, article_content: ctx.text })
+        });
+        var result = await resp.json();
+
+        var sysMsgs = document.querySelectorAll('#minimal-ai-messages .ai-msg.system');
+        sysMsgs.forEach(function(m) { if (m.textContent === '思考中...') m.remove(); });
+
+        if (result.text || result.answer) {
+            var reply = result.text || result.answer;
+            minimalAddMsg('assistant', reply);
+        } else if (result.error) {
+            minimalAddMsg('system', '错误: ' + result.error);
+        }
+    } catch (err) {
+        var errMsgs = document.querySelectorAll('#minimal-ai-messages .ai-msg.system');
+        errMsgs.forEach(function(m) { if (m.textContent === '思考中...') m.remove(); });
+        minimalAddMsg('system', '请求失败: ' + err.message);
+    }
+}
+
+function replaceMinimalAiResult() {
+    if (!_minimalAiResultText) return;
+    var textarea = document.getElementById('article-content');
+    textarea.value = _minimalAiResultText;
+    textarea.dispatchEvent(new Event('input'));
+    closeMinimalAiResult();
+}
+
+function insertMinimalAiResult() {
+    if (!_minimalAiResultText) return;
+    var textarea = document.getElementById('article-content');
+    textarea.value = textarea.value + '\n\n' + _minimalAiResultText;
+    textarea.dispatchEvent(new Event('input'));
+    closeMinimalAiResult();
+}
+
+function closeMinimalAiResult() {
+    document.getElementById('minimal-ai-result').style.display = 'none';
+}
+
+// ===== 表格编辑器 =====
+
+var _tbl = { rows: 5, cols: 5, hasHeader: true, striped: false, formulas: {}, textarea: null, selCells: [], mergedCells: [] };
+
+function colLetter(i) { var s = ''; while (i >= 0) { s = String.fromCharCode(65 + (i % 26)) + s; i = Math.floor(i / 26) - 1; } return s; }
+
+function cellRef(r, c) { return colLetter(c) + (r + 1); }
+
+function parseCellRef(ref) {
+    var m = /^([A-Z]+)(\d+)$/.exec(ref.toUpperCase());
+    if (!m) return null;
+    var c = 0;
+    for (var i = 0; i < m[1].length; i++) c = c * 26 + (m[1].charCodeAt(i) - 64);
+    return { r: parseInt(m[2]) - 1, c: c - 1 };
+}
+
+function openTableEditor(textarea) {
+    _tbl.textarea = textarea;
+    _tbl.selCells = [];
+    _tbl.mergedCells = [];
+    _tbl.editRange = null;
+    document.getElementById('tbl-formula-input').value = '';
+    document.getElementById('tbl-formula-result').style.display = 'none';
+
+    // 检测光标是否在已有表格内 → 载入编辑
+    var existing = findTableAtCursor(textarea);
+    if (existing) {
+        if (!parseTableFromHTML(existing.html)) {
+            // 解析失败，回退到新建
+            initFreshTable();
+        } else {
+            _tbl.editRange = { start: existing.start, end: existing.end };
+        }
+    } else {
+        initFreshTable();
+    }
+
+    document.getElementById('table-editor-modal').style.display = 'flex';
+    document.getElementById('tbl-striped').checked = _tbl.striped;
+    renderTblGrid();
+}
+
+function initFreshTable() {
+    _tbl.rows = 5;
+    _tbl.cols = 5;
+    _tbl.hasHeader = true;
+    _tbl.striped = false;
+    _tbl.formulas = {};
+    _tbl.editRange = null;
+}
+
+function findTableAtCursor(textarea) {
+    var val = textarea.value;
+    var pos = textarea.selectionStart;
+    // 向前查找 <table
+    var before = val.substring(0, pos);
+    var after = val.substring(pos);
+    var tableStart = before.lastIndexOf('<table');
+    if (tableStart === -1) return null;
+    // 确保光标不在 <table 之前（即不跨越其他标签）
+    var between = before.substring(tableStart);
+    if (between.indexOf('</table>') !== -1) return null; // 光标前已有闭合
+    // 向后查找 </table>
+    var tableEnd = after.indexOf('</table>');
+    if (tableEnd === -1) return null;
+    tableEnd = pos + tableEnd + '</table>'.length;
+    // 确保没有在闭合前又开了新 table
+    var betweenEnd = val.substring(pos, tableEnd);
+    if (betweenEnd.indexOf('<table') !== -1) return null; // 嵌套或相邻，保守放弃
+
+    var html = val.substring(tableStart, tableEnd);
+    return { start: tableStart, end: tableEnd, html: html };
+}
+
+function parseTableFromHTML(html) {
+    try {
+        var div = document.createElement('div');
+        div.innerHTML = html;
+        var table = div.querySelector('table');
+        if (!table) return false;
+
+        // 读取 metadata
+        var meta = table.getAttribute('data-table');
+        var formulas = {};
+        var hasHeader = true;
+        var striped = false;
+        if (meta) {
+            try {
+                var parsed = JSON.parse(meta);
+                formulas = parsed.formulas || {};
+                hasHeader = parsed.hasHeader !== false;
+                striped = parsed.striped || false;
+            } catch(e) {}
+        }
+
+        // 解析行和单元格
+        var rows = table.querySelectorAll('tr');
+        var maxCols = 0;
+        var cellData = {};
+        var mergedCells = [];
+
+        for (var r = 0; r < rows.length; r++) {
+            var cells = rows[r].querySelectorAll('th, td');
+            var c = 0;
+            // 跳过被 rowspan 占位的列
+            for (var ci = 0; ci < cells.length; ci++) {
+                var cell = cells[ci];
+                // 找到当前实际列位置（跳过被上面 rowspan 占用的）
+                while (cellData[cellRef(r, c)] !== undefined && cellData[cellRef(r, c)].skip) c++;
+
+                var ref = cellRef(r, c);
+                var text = (cell.textContent || '').trim();
+                var colspan = parseInt(cell.getAttribute('colspan')) || 1;
+                var rowspan = parseInt(cell.getAttribute('rowspan')) || 1;
+
+                cellData[ref] = { text: text };
+
+                // 标记被合并覆盖的格子为 skip
+                for (var rr = r; rr < r + rowspan; rr++) {
+                    for (var cc = c; cc < c + colspan; cc++) {
+                        if (rr === r && cc === c) continue;
+                        cellData[cellRef(rr, cc)] = { skip: true };
+                    }
+                }
+
+                if (colspan > 1 || rowspan > 1) {
+                    mergedCells.push({ r: r, c: c, rs: rowspan, cs: colspan });
+                }
+
+                c += colspan;
+                if (c > maxCols) maxCols = c;
+            }
+        }
+
+        // 装入 _tbl
+        _tbl.rows = rows.length;
+        _tbl.cols = maxCols;
+        _tbl.hasHeader = hasHeader;
+        _tbl.striped = striped;
+        _tbl.formulas = formulas;
+        _tbl.mergedCells = mergedCells;
+
+        // 保存 cellData 供 renderTblGridWithData 使用
+        _tbl._parsedCellData = cellData;
+        // Override renderTblGrid for this session
+        var origRender = renderTblGrid;
+        renderTblGrid = function() {
+            renderTblGridWithData(buildCellDataFromParsed());
+            renderTblGrid = origRender;
+        };
+
+        return true;
+    } catch(e) {
+        return false;
+    }
+}
+
+function buildCellDataFromParsed() {
+    var data = {};
+    var parsed = _tbl._parsedCellData || {};
+    var keys = Object.keys(parsed);
+    for (var i = 0; i < keys.length; i++) {
+        var ref = keys[i];
+        var info = parsed[ref];
+        if (info.skip) continue;
+        // 优先显示公式计算值（如果有公式且结果存在）
+        if (_tbl.formulas[ref] !== undefined && info.text) {
+            data[ref] = info.text;
+        } else {
+            data[ref] = info.text || '';
+        }
+    }
+    // 清理
+    _tbl._parsedCellData = null;
+    return data;
+}
+
+function closeTableEditor() {
+    document.getElementById('table-editor-modal').style.display = 'none';
+}
+
+function renderTblGrid() {
+    var grid = document.getElementById('table-editor-grid');
+    var html = '';
+    for (var r = 0; r < _tbl.rows; r++) {
+        html += '<tr>';
+        for (var c = 0; c < _tbl.cols; c++) {
+            var ref = cellRef(r, c);
+            var tag = (_tbl.hasHeader && r === 0) ? 'th' : 'td';
+            var cls = '';
+            if (_tbl.striped && r % 2 === 1 && !(_tbl.hasHeader && r === 0)) cls += ' striped';
+            var val = (_tbl.formulas[ref] !== undefined) ? _tbl.formulas[ref] : '';
+            html += '<' + tag + ' class="' + cls + '" contenteditable="true" data-ref="' + ref + '" onfocus="tblOnCellFocus(this)" onblur="tblOnCellBlur(this)" onmousedown="tblOnCellMouseDown(event, this)">' + esc(val) + '</' + tag + '>';
+        }
+        html += '</tr>';
+    }
+    grid.innerHTML = html;
+    _tbl.selCells = [];
+    updateTblSelInfo();
+}
+
+function tblOnCellFocus(td) {
+    var ref = td.dataset.ref;
+    var input = document.getElementById('tbl-formula-input');
+    var formula = _tbl.formulas[ref];
+    if (formula !== undefined) {
+        input.value = formula;
+    } else {
+        input.value = td.textContent;
+    }
+    document.getElementById('tbl-formula-result').style.display = 'none';
+}
+
+function tblOnCellBlur(td) {
+    // Save cell content on blur
+}
+
+function tblOnCellMouseDown(e, td) {
+    if (e.shiftKey || e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        var ref = td.dataset.ref;
+        var idx = _tbl.selCells.indexOf(ref);
+        if (idx >= 0) {
+            _tbl.selCells.splice(idx, 1);
+        } else {
+            _tbl.selCells.push(ref);
+        }
+        updateTblSelHighlight();
+        updateTblSelInfo();
+    } else {
+        _tbl.selCells = [td.dataset.ref];
+        updateTblSelHighlight();
+        updateTblSelInfo();
+    }
+}
+
+function updateTblSelHighlight() {
+    var cells = document.querySelectorAll('#table-editor-grid td, #table-editor-grid th');
+    cells.forEach(function(c) {
+        c.classList.toggle('tbl-selected', _tbl.selCells.indexOf(c.dataset.ref) >= 0);
+    });
+}
+
+function updateTblSelInfo() {
+    var info = document.getElementById('tbl-formula-result');
+    if (_tbl.selCells.length > 1) {
+        info.textContent = '已选 ' + _tbl.selCells.length + ' 个单元格';
+        info.style.display = '';
+    } else if (_tbl.selCells.length === 0) {
+        info.style.display = 'none';
+    }
+}
+
+function getTblCellValue(ref) {
+    var td = document.querySelector('#table-editor-grid [data-ref="' + ref + '"]');
+    if (!td) return '';
+    return td.textContent.trim();
+}
+
+function tblGetRangeValues(rangeExpr) {
+    var m = /^([A-Z]+\d+):([A-Z]+\d+)$/.exec(rangeExpr.trim());
+    if (!m) return [];
+    var start = parseCellRef(m[1]);
+    var end = parseCellRef(m[2]);
+    if (!start || !end) return [];
+    var vals = [];
+    for (var r = Math.min(start.r, end.r); r <= Math.max(start.r, end.r); r++) {
+        for (var c = Math.min(start.c, end.c); c <= Math.max(start.c, end.c); c++) {
+            vals.push(getTblCellValue(cellRef(r, c)));
+        }
+    }
+    return vals;
+}
+
+function tblLocalCalc(formula) {
+    var expr = formula.replace(/^\s*=\s*/, '').trim();
+    // SUM
+    var m = /^SUM\((.+)\)$/i.exec(expr);
+    if (m) {
+        var vals = tblGetRangeValues(m[1]);
+        var nums = vals.map(parseFloat).filter(function(v) { return !isNaN(v); });
+        return nums.reduce(function(a, b) { return a + b; }, 0);
+    }
+    // AVG / AVERAGE
+    m = /^AVG\((.+)\)$|^AVERAGE\((.+)\)$/i.exec(expr);
+    if (m) {
+        vals = tblGetRangeValues(m[1] || m[2]);
+        nums = vals.map(parseFloat).filter(function(v) { return !isNaN(v); });
+        if (nums.length === 0) return 0;
+        return nums.reduce(function(a, b) { return a + b; }, 0) / nums.length;
+    }
+    // COUNT
+    m = /^COUNT\((.+)\)$/i.exec(expr);
+    if (m) {
+        vals = tblGetRangeValues(m[1]);
+        return vals.filter(function(v) { return v !== ''; }).length;
+    }
+    // MAX
+    m = /^MAX\((.+)\)$/i.exec(expr);
+    if (m) {
+        vals = tblGetRangeValues(m[1]);
+        nums = vals.map(parseFloat).filter(function(v) { return !isNaN(v); });
+        if (nums.length === 0) return 0;
+        return Math.max.apply(null, nums);
+    }
+    // MIN
+    m = /^MIN\((.+)\)$/i.exec(expr);
+    if (m) {
+        vals = tblGetRangeValues(m[1]);
+        nums = vals.map(parseFloat).filter(function(v) { return !isNaN(v); });
+        if (nums.length === 0) return 0;
+        return Math.min.apply(null, nums);
+    }
+    // Simple arithmetic: =A1+B2, =A1*2, etc.
+    try {
+        var resolved = expr.replace(/([A-Z]+\d+)/gi, function(ref) {
+            var v = getTblCellValue(ref);
+            var n = parseFloat(v);
+            return isNaN(n) ? '0' : n;
+        });
+        // Sanity check - only allow safe characters
+        if (/^[\d\s+\-*/().,%^]+$/.test(resolved)) {
+            var result = Function('"use strict"; return (' + resolved + ')')();
+            if (typeof result === 'number' && !isNaN(result)) return Math.round(result * 100) / 100;
+        }
+    } catch(e) {}
+    return null;
+}
+
+function tblSelectCol() {
+    if (_tbl.selCells.length !== 1) { alert('请先选中该列中的任意一个单元格'); return; }
+    var p = parseCellRef(_tbl.selCells[0]);
+    if (!p) return;
+    _tbl.selCells = [];
+    for (var r = 0; r < _tbl.rows; r++) {
+        _tbl.selCells.push(cellRef(r, p.c));
+    }
+    updateTblSelHighlight();
+    updateTblSelInfo();
+}
+
+function tblSelectRow() {
+    if (_tbl.selCells.length !== 1) { alert('请先选中该行中的任意一个单元格'); return; }
+    var p = parseCellRef(_tbl.selCells[0]);
+    if (!p) return;
+    _tbl.selCells = [];
+    for (var c = 0; c < _tbl.cols; c++) {
+        _tbl.selCells.push(cellRef(p.r, c));
+    }
+    updateTblSelHighlight();
+    updateTblSelInfo();
+}
+
+// 对公式中的单元格引用进行偏移调整，如 =A1+B1 偏移1行后 → =A2+B2
+function tblAdjustFormulaRefs(formula, dr, dc) {
+    if (!dr && !dc) return formula;
+    return formula.replace(/([A-Z]+)(\d+)/gi, function(match, col, row) {
+        var c = 0;
+        for (var i = 0; i < col.length; i++) c = c * 26 + (col.toUpperCase().charCodeAt(i) - 64);
+        var newC = c + dc;
+        var newR = parseInt(row) + dr;
+        if (newC < 1 || newR < 1) return match; // 不偏移到无效位置
+        return colLetter(newC - 1) + newR;
+    });
+}
+
+// 对单个格子的公式求值（先本地，再 LLM）
+async function tblApplyToCell(formula, ref, tableDataForLLM) {
+    var resultEl = document.getElementById('tbl-formula-result');
+    // 公式（= 开头）：先尝试本地计算
+    if (/^=/.test(formula)) {
+        var localResult = tblLocalCalc(formula);
+        if (localResult !== null) {
+            _tbl.formulas[ref] = formula;
+            var td = document.querySelector('#table-editor-grid [data-ref="' + ref + '"]');
+            if (td) td.textContent = String(localResult);
+            resultEl.textContent = ref + ' = ' + localResult;
+            resultEl.style.display = '';
+            return;
+        }
+    }
+
+    // 本地算不出来或自然语言 → LLM
+    resultEl.textContent = '计算中...';
+    resultEl.style.display = '';
+
+    var tableData = tableDataForLLM || tblGatherTableData();
+    try {
+        var resp = await fetch('/api/table/calc', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ table: tableData, formula: formula, cell: ref, has_header: _tbl.hasHeader })
+        });
+        var result = await resp.json();
+        if (result.value !== undefined) {
+            _tbl.formulas[ref] = formula;
+            var td = document.querySelector('#table-editor-grid [data-ref="' + ref + '"]');
+            if (td) td.textContent = String(result.value);
+            resultEl.textContent = ref + ' = ' + result.value;
+        } else if (result.error) {
+            resultEl.textContent = result.error;
+        }
+    } catch (err) {
+        resultEl.textContent = '计算失败: ' + err.message;
+    }
+}
+
+function tblGatherTableData() {
+    var tableData = [];
+    for (var r = 0; r < _tbl.rows; r++) {
+        var row = [];
+        for (var c = 0; c < _tbl.cols; c++) {
+            row.push(getTblCellValue(cellRef(r, c)));
+        }
+        tableData.push(row);
+    }
+    return tableData;
+}
+
+// 对多个选中格批量套用公式，自动偏移引用
+async function tblBulkApply(formula) {
+    if (_tbl.selCells.length < 2) return;
+    var baseRef = _tbl.selCells[0];
+    var baseP = parseCellRef(baseRef);
+    if (!baseP) return;
+
+    var resultEl = document.getElementById('tbl-formula-result');
+    var tableData = tblGatherTableData();
+    var applied = 0;
+
+    for (var i = 0; i < _tbl.selCells.length; i++) {
+        var ref = _tbl.selCells[i];
+        var p = parseCellRef(ref);
+        if (!p) continue;
+        var dr = p.r - baseP.r;
+        var dc = p.c - baseP.c;
+        var adjusted = tblAdjustFormulaRefs(formula, dr, dc);
+
+        // 尝试本地计算
+        var localResult = tblLocalCalc(adjusted);
+        if (localResult !== null) {
+            _tbl.formulas[ref] = adjusted;
+            var td = document.querySelector('#table-editor-grid [data-ref="' + ref + '"]');
+            if (td) td.textContent = String(localResult);
+            applied++;
+            continue;
+        }
+
+        // 本地不行 → LLM 单独算
+        resultEl.textContent = '计算中 (' + (i+1) + '/' + _tbl.selCells.length + ')...';
+        resultEl.style.display = '';
+        try {
+            var resp = await fetch('/api/table/calc', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({ table: tableData, formula: adjusted, cell: ref, has_header: _tbl.hasHeader })
+            });
+            var result = await resp.json();
+            if (result.value !== undefined) {
+                _tbl.formulas[ref] = adjusted;
+                var td = document.querySelector('#table-editor-grid [data-ref="' + ref + '"]');
+                if (td) td.textContent = String(result.value);
+                applied++;
+            }
+        } catch (err) {
+            // 继续下一个
+        }
+    }
+
+    resultEl.textContent = '已计算 ' + applied + ' 个单元格';
+    resultEl.style.display = '';
+}
+
+async function tblEvalFormula() {
+    var input = document.getElementById('tbl-formula-input');
+    var formula = input.value.trim();
+    if (!formula) return;
+
+    if (_tbl.selCells.length === 0) {
+        alert('请先选中至少一个单元格（可按住 Ctrl 多选，或用工具栏「选列」「选行」）');
+        return;
+    }
+
+    // 多格 + 公式（= 开头）→ 批量偏移套用
+    if (_tbl.selCells.length > 1 && /^=/.test(formula)) {
+        tblBulkApply(formula);
+        return;
+    }
+
+    // 多格 + 自然语言 → 一次送给 LLM，让 LLM 看到全部选中格
+    if (_tbl.selCells.length > 1 && !/^=/.test(formula)) {
+        var resultEl = document.getElementById('tbl-formula-result');
+        resultEl.textContent = '计算中...';
+        resultEl.style.display = '';
+        var tableData = tblGatherTableData();
+        try {
+            var resp = await fetch('/api/table/calc', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({
+                    table: tableData,
+                    formula: formula,
+                    cell: _tbl.selCells[0],
+                    cells: _tbl.selCells,
+                    has_header: _tbl.hasHeader
+                })
+            });
+            var result = await resp.json();
+            if (result.values && typeof result.values === 'object') {
+                var keys = Object.keys(result.values);
+                for (var k = 0; k < keys.length; k++) {
+                    var ref = keys[k];
+                    _tbl.formulas[ref] = formula;
+                    var td = document.querySelector('#table-editor-grid [data-ref="' + ref + '"]');
+                    if (td) td.textContent = String(result.values[ref]);
+                }
+                resultEl.textContent = '已计算 ' + keys.length + ' 个单元格';
+            } else if (result.value !== undefined) {
+                // LLM returned single value — apply to first selected cell only
+                var ref0 = _tbl.selCells[0];
+                _tbl.formulas[ref0] = formula;
+                var td0 = document.querySelector('#table-editor-grid [data-ref="' + ref0 + '"]');
+                if (td0) td0.textContent = String(result.value);
+                resultEl.textContent = ref0 + ' = ' + result.value;
+            } else if (result.error) {
+                resultEl.textContent = result.error;
+            }
+        } catch (err) {
+            resultEl.textContent = '计算失败: ' + err.message;
+        }
+        return;
+    }
+
+    // 单格 → 直接套用
+    await tblApplyToCell(formula, _tbl.selCells[0]);
+}
+
+function tblSnapshot() {
+    var snap = { cells: {}, formulas: {} };
+    for (var r = 0; r < _tbl.rows; r++) {
+        for (var c = 0; c < _tbl.cols; c++) {
+            var ref = cellRef(r, c);
+            snap.cells[ref] = getTblCellValue(ref);
+            if (_tbl.formulas[ref] !== undefined) snap.formulas[ref] = _tbl.formulas[ref];
+        }
+    }
+    return snap;
+}
+
+function tblRestoreWithShift(snap, delR, delC, delCount, isAdd) {
+    // isAdd=true: inserting at delR/delC, shift existing cells away
+    // isAdd=false: deleting at delR/delC, shift existing cells toward
+    var newFormulas = {};
+    var newCells = {};
+    var oldKeys = Object.keys(snap.cells);
+
+    for (var i = 0; i < oldKeys.length; i++) {
+        var ref = oldKeys[i];
+        var p = parseCellRef(ref);
+        if (!p) continue;
+
+        var newR = p.r, newC = p.c;
+
+        if (isAdd) {
+            // inserting: cells at or after insert point shift away
+            if (delR >= 0 && p.r >= delR) newR = p.r + 1;
+            if (delC >= 0 && p.c >= delC) newC = p.c + 1;
+        } else {
+            // deleting: cells after delete point shift toward; deleted cells dropped
+            if (delR >= 0 && p.r === delR) continue;
+            if (delC >= 0 && p.c === delC) continue;
+            if (delR >= 0 && p.r > delR) newR = p.r - 1;
+            if (delC >= 0 && p.c > delC) newC = p.c - 1;
+        }
+
+        var newRef = cellRef(newR, newC);
+        newCells[newRef] = snap.cells[ref];
+        if (snap.formulas[ref] !== undefined) newFormulas[newRef] = snap.formulas[ref];
+    }
+
+    _tbl.formulas = newFormulas;
+    // Render with pre-filled values
+    renderTblGridWithData(newCells);
+}
+
+function renderTblGridWithData(cellData) {
+    var grid = document.getElementById('table-editor-grid');
+    var html = '';
+    for (var r = 0; r < _tbl.rows; r++) {
+        html += '<tr>';
+        for (var c = 0; c < _tbl.cols; c++) {
+            var ref = cellRef(r, c);
+            var tag = (_tbl.hasHeader && r === 0) ? 'th' : 'td';
+            var cls = '';
+            if (_tbl.striped && r % 2 === 1 && !(_tbl.hasHeader && r === 0)) cls += ' striped';
+            var val = cellData[ref] !== undefined ? cellData[ref] : '';
+            html += '<' + tag + ' class="' + cls + '" contenteditable="true" data-ref="' + ref + '" onfocus="tblOnCellFocus(this)" onblur="tblOnCellBlur(this)" onmousedown="tblOnCellMouseDown(event, this)">' + esc(val) + '</' + tag + '>';
+        }
+        html += '</tr>';
+    }
+    grid.innerHTML = html;
+    _tbl.selCells = [];
+    updateTblSelInfo();
+}
+
+function tblAddRow() {
+    var snap = tblSnapshot();
+    // 有选中格 → 在其所在行下方插入；否则在末尾追加
+    var insertAfter = _tbl.rows - 1; // default: end
+    if (_tbl.selCells.length > 0) {
+        var p = parseCellRef(_tbl.selCells[0]);
+        if (p) insertAfter = p.r;
+    }
+    _tbl.rows++;
+    tblRestoreWithShift(snap, insertAfter + 1, -1, 1, true);
+}
+
+function tblAddCol() {
+    var snap = tblSnapshot();
+    var insertAfter = _tbl.cols - 1;
+    if (_tbl.selCells.length > 0) {
+        var p = parseCellRef(_tbl.selCells[0]);
+        if (p) insertAfter = p.c;
+    }
+    _tbl.cols++;
+    tblRestoreWithShift(snap, -1, insertAfter + 1, 1, true);
+}
+
+function tblDelRow() {
+    if (_tbl.rows <= 1) return;
+    var target = _tbl.rows - 1; // default: last row
+    if (_tbl.selCells.length > 0) {
+        var p = parseCellRef(_tbl.selCells[0]);
+        if (p) target = p.r;
+    }
+    var snap = tblSnapshot();
+    _tbl.rows--;
+    tblRestoreWithShift(snap, target, -1, 1, false);
+}
+
+function tblDelCol() {
+    if (_tbl.cols <= 1) return;
+    var target = _tbl.cols - 1;
+    if (_tbl.selCells.length > 0) {
+        var p = parseCellRef(_tbl.selCells[0]);
+        if (p) target = p.c;
+    }
+    var snap = tblSnapshot();
+    _tbl.cols--;
+    tblRestoreWithShift(snap, -1, target, 1, false);
+}
+
+function renderTblGrid() {
+    var snap = tblSnapshot();
+    renderTblGridWithData(snap.cells);
+}
+
+function tblToggleHeader() {
+    _tbl.hasHeader = !_tbl.hasHeader;
+    renderTblGrid();
+}
+
+function tblToggleStriped() {
+    _tbl.striped = document.getElementById('tbl-striped').checked;
+    var rows = document.querySelectorAll('#table-editor-grid tr');
+    rows.forEach(function(tr, i) {
+        var cells = tr.querySelectorAll('td');
+        cells.forEach(function(td) {
+            td.classList.toggle('striped', _tbl.striped && i % 2 === 1 && !(_tbl.hasHeader && i === 0));
+        });
+    });
+}
+
+function tblMergeCells() {
+    if (_tbl.selCells.length < 2) { alert('请按住 Ctrl/Shift 多选至少 2 个相邻单元格'); return; }
+
+    // Parse refs into coordinates
+    var coords = [];
+    for (var i = 0; i < _tbl.selCells.length; i++) {
+        var p = parseCellRef(_tbl.selCells[i]);
+        if (p) coords.push(p);
+    }
+    if (coords.length < 2) return;
+
+    // Find bounding box
+    var minR = Math.min.apply(null, coords.map(function(c) { return c.r; }));
+    var maxR = Math.max.apply(null, coords.map(function(c) { return c.r; }));
+    var minC = Math.min.apply(null, coords.map(function(c) { return c.c; }));
+    var maxC = Math.max.apply(null, coords.map(function(c) { return c.c; }));
+
+    var rowspan = maxR - minR + 1;
+    var colspan = maxC - minC + 1;
+
+    // Set colspan/rowspan on top-left cell
+    var topLeftRef = cellRef(minR, minC);
+    var tl = document.querySelector('#table-editor-grid [data-ref="' + topLeftRef + '"]');
+    if (tl) {
+        tl.setAttribute('colspan', colspan);
+        tl.setAttribute('rowspan', rowspan);
+        tl.setAttribute('data-merged', '1');
+        tl.style.background = '#faf9f6';
+    }
+    // Hide merged cells
+    for (var r = minR; r <= maxR; r++) {
+        for (var c = minC; c <= maxC; c++) {
+            if (r === minR && c === minC) continue;
+            var td = document.querySelector('#table-editor-grid [data-ref="' + cellRef(r, c) + '"]');
+            if (td) { td.style.display = 'none'; td.setAttribute('data-hidden', '1'); }
+        }
+    }
+    _tbl.mergedCells.push({ r: minR, c: minC, rs: rowspan, cs: colspan });
+    _tbl.selCells = [];
+    updateTblSelHighlight();
+}
+
+function tblSplitCell() {
+    if (_tbl.selCells.length !== 1) { alert('请选中一个已合并的单元格进行拆分'); return; }
+    var ref = _tbl.selCells[0];
+    var td = document.querySelector('#table-editor-grid [data-ref="' + ref + '"]');
+    if (!td) return;
+
+    var rs = parseInt(td.getAttribute('rowspan')) || 1;
+    var cs = parseInt(td.getAttribute('colspan')) || 1;
+    if (rs === 1 && cs === 1) return;
+
+    td.removeAttribute('colspan');
+    td.removeAttribute('rowspan');
+    td.removeAttribute('data-merged');
+    td.style.background = '';
+
+    // Restore hidden cells in range
+    var p = parseCellRef(ref);
+    if (!p) return;
+    for (var r = p.r; r < p.r + rs; r++) {
+        for (var c = p.c; c < p.c + cs; c++) {
+            if (r === p.r && c === p.c) continue;
+            var ct = document.querySelector('#table-editor-grid [data-ref="' + cellRef(r, c) + '"]');
+            if (ct) { ct.style.display = ''; ct.removeAttribute('data-hidden'); }
+        }
+    }
+    _tbl.mergedCells = _tbl.mergedCells.filter(function(m) { return !(m.r === p.r && m.c === p.c); });
+    _tbl.selCells = [];
+    updateTblSelHighlight();
+}
+
+function tblSetAlign(align) {
+    if (_tbl.selCells.length === 0) { alert('请先选中单元格'); return; }
+    for (var i = 0; i < _tbl.selCells.length; i++) {
+        var td = document.querySelector('#table-editor-grid [data-ref="' + _tbl.selCells[i] + '"]');
+        if (td) td.style.textAlign = align;
+    }
+}
+
+function insertTableFromEditor() {
+    // Build HTML table from grid state
+    var html = '<table data-table=\'{"formulas":' + JSON.stringify(_tbl.formulas) + ',"hasHeader":' + _tbl.hasHeader + ',"striped":' + _tbl.striped + '}\'>\n';
+    for (var r = 0; r < _tbl.rows; r++) {
+        html += '<tr>\n';
+        for (var c = 0; c < _tbl.cols; c++) {
+            var ref = cellRef(r, c);
+            var td = document.querySelector('#table-editor-grid [data-ref="' + ref + '"]');
+            if (td && td.getAttribute('data-hidden') === '1') continue;
+
+            var tag = (_tbl.hasHeader && r === 0) ? 'th' : 'td';
+            var attrs = '';
+            if (td) {
+                var colspan = td.getAttribute('colspan');
+                var rowspan = td.getAttribute('rowspan');
+                if (colspan && parseInt(colspan) > 1) attrs += ' colspan="' + colspan + '"';
+                if (rowspan && parseInt(rowspan) > 1) attrs += ' rowspan="' + rowspan + '"';
+                if (td.style.textAlign) attrs += ' style="text-align:' + td.style.textAlign + '"';
+            }
+            var val = getTblCellValue(ref);
+            html += '<' + tag + attrs + '>' + esc(val) + '</' + tag + '>\n';
+        }
+        html += '</tr>\n';
+    }
+    html += '</table>';
+
+    var textarea = _tbl.textarea || document.getElementById('article-content');
+    if (!textarea) { closeTableEditor(); return; }
+
+    textarea.focus();
+
+    if (_tbl.editRange) {
+        // 编辑已有表格 → 原地替换
+        var before = textarea.value.substring(0, _tbl.editRange.start);
+        var after = textarea.value.substring(_tbl.editRange.end);
+        // 保留前后换行
+        if (before.length > 0 && before[before.length - 1] === '\n') before = before.slice(0, -1);
+        else if (before.length > 0 && before[before.length - 1] !== '\n') html = '\n' + html;
+        if (after.length > 0 && after[0] === '\n') after = after.substring(1);
+        else if (after.length > 0 && after[0] !== '\n') html = html + '\n';
+        textarea.value = before + '\n' + html + '\n' + after;
+        var newPos = before.length + html.length + 2;
+        textarea.setSelectionRange(newPos, newPos);
+    } else {
+        // 新建表格 → 插入光标处
+        var start = textarea.selectionStart;
+        var end = textarea.selectionEnd;
+        doReplace(textarea, '\n' + html + '\n', start, end, start + html.length + 2);
+    }
+
+    textarea.dispatchEvent(new Event('input'));
+    closeTableEditor();
+}
+

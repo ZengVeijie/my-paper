@@ -2,7 +2,121 @@
 $edit_mode = isset($edit_article);
 $article = $edit_article ?? ['title' => '', 'content' => '', 'summary' => '', 'tags' => [], 'collection_ids' => [], 'visibility' => 'private'];
 $article_id = $article['id'] ?? '';
+$user = current_user();
+$editor_mode = $user['editor_mode'] ?? 'default';
 ?>
+
+<?php if ($editor_mode === 'minimal'): ?>
+<!-- ===== 极简编辑器 ===== -->
+<div class="editor-page editor-minimal" id="editor-page">
+    <div class="minimal-topbar">
+        <input type="text" id="article-title" class="minimal-title-input" placeholder="无标题" value="<?= h($article['title'] ?? '') ?>" autofocus>
+        <div class="minimal-topbar-actions">
+            <button class="minimal-btn minimal-meta-btn" id="minimal-meta-btn" title="文章选项">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+            </button>
+            <button class="minimal-btn minimal-save-btn" id="save-btn" onclick="saveArticle()">保存</button>
+            <?php if ($edit_mode): ?>
+            <button class="minimal-btn" id="save-as-btn" onclick="saveAsArticle()">另存</button>
+            <?php endif; ?>
+        </div>
+    </div>
+
+    <!-- 文章选项抽屉 -->
+    <div class="minimal-meta-drawer" id="minimal-meta-drawer" style="display:none">
+        <div class="minimal-meta-inner">
+            <label class="minimal-meta-label">
+                <span>摘要</span>
+                <textarea id="article-summary" rows="2" maxlength="200" placeholder="可选"><?= h($article['summary'] ?? '') ?></textarea>
+            </label>
+            <label class="minimal-meta-label">
+                <span>标签</span>
+                <input type="text" id="article-tags" placeholder="逗号分隔" value="<?= h(implode(',', $article['tags'] ?? [])) ?>">
+            </label>
+            <label class="minimal-meta-label">
+                <span>可见性</span>
+                <select id="article-visibility">
+                    <option value="private" <?= ($article['visibility'] ?? 'private') === 'private' ? 'selected' : '' ?>>仅自己</option>
+                    <option value="internal" <?= ($article['visibility'] ?? '') === 'internal' ? 'selected' : '' ?>>站内可见</option>
+                </select>
+            </label>
+            <label class="minimal-meta-label">
+                <span>情感</span>
+                <select id="article-sentiment">
+                    <option value="">未设置</option>
+                    <?php foreach (['喜悦','忧伤','愤怒','焦虑','平静','兴奋','疲惫','感激'] as $m): ?>
+                    <option value="<?= $m ?>" <?= ($article['sentiment']['mood'] ?? '') === $m ? 'selected' : '' ?>><?= $m ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+        </div>
+    </div>
+
+    <!-- 编辑/预览切换 -->
+    <div class="minimal-view-toggle" id="minimal-view-toggle">
+        <button class="minimal-toggle-btn active" data-mode="edit" id="minimal-toggle-edit">编辑</button>
+        <button class="minimal-toggle-btn" data-mode="view" id="minimal-toggle-view">预览</button>
+    </div>
+
+    <!-- 编辑区 -->
+    <div class="minimal-editor-area" id="minimal-editor-area">
+        <textarea id="article-content" class="minimal-textarea" placeholder="开始写作..."><?= h($article['content'] ?? '') ?></textarea>
+        <div class="minimal-preview rendered-content markdown-body" id="minimal-preview" style="display:none"></div>
+    </div>
+
+    <!-- AI 悬浮按钮 -->
+    <button class="minimal-ai-fab" id="minimal-ai-fab" title="AI 助手">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a4 4 0 014 4c0 2-2 3-2 5h-4c0-2-2-3-2-5a4 4 0 014-4z"/><path d="M8 14h8"/><path d="M9 18h6"/></svg>
+    </button>
+
+    <!-- AI 迷你面板 -->
+    <div class="minimal-ai-panel" id="minimal-ai-panel" style="display:none">
+        <div class="minimal-ai-header">
+            <span>AI 助手</span>
+            <button class="minimal-ai-close" id="minimal-ai-close">&times;</button>
+        </div>
+        <div class="minimal-ai-actions" id="minimal-ai-actions">
+            <button onclick="minimalAiAction('polish')">润色</button>
+            <button onclick="minimalAiContinue()">续写</button>
+            <button onclick="minimalAiAction('summary')">摘要</button>
+            <button onclick="minimalAiAction('style')">风格</button>
+        </div>
+        <div class="minimal-ai-chat">
+            <div class="minimal-ai-messages" id="minimal-ai-messages"></div>
+            <div class="minimal-ai-input-row">
+                <input type="text" id="minimal-ai-input" placeholder="输入问题..." onkeydown="if(event.key==='Enter')minimalAiChat()">
+                <button onclick="minimalAiChat()">发送</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI 结果弹窗 -->
+    <div class="minimal-ai-result" id="minimal-ai-result" style="display:none">
+        <div class="minimal-ai-result-header">
+            <span id="minimal-ai-result-label">AI 结果</span>
+            <button class="minimal-ai-close" onclick="closeMinimalAiResult()">&times;</button>
+        </div>
+        <div class="minimal-ai-result-body" id="minimal-ai-result-body"></div>
+        <div class="minimal-ai-result-actions">
+            <button class="btn btn-sm" onclick="replaceMinimalAiResult()">替换原文</button>
+            <button class="btn btn-sm" onclick="insertMinimalAiResult()">追加到文末</button>
+            <button class="btn btn-sm" onclick="closeMinimalAiResult()">关闭</button>
+        </div>
+    </div>
+
+    <!-- 上传（隐藏） -->
+    <input type="file" id="file-input" style="display:none" multiple accept="image/*,.pdf,.doc,.docx,.txt,.md,.zip">
+
+    <script src="/public/js/editor.js"></script>
+    <script>
+    window.articleId = <?= json_encode($article_id) ?>;
+    window.isEdit = <?= json_encode($edit_mode) ?>;
+    window.editorMode = 'minimal';
+    </script>
+</div>
+
+<?php else: ?>
+<!-- ===== 标准编辑器 ===== -->
 <div class="editor-page">
     <div class="editor-header">
         <input type="text" id="article-title" class="title-input" placeholder="文章标题..." value="<?= h($article['title'] ?? '') ?>" autofocus>
@@ -63,7 +177,7 @@ $article_id = $article['id'] ?? '';
                 <button type="button" data-action="link" title="链接">&#x1f517;</button>
                 <button type="button" data-action="image" title="图片">&#x1f5bc;</button>
                 <button type="button" data-action="code" title="代码">&lt;/&gt;</button>
-                <button type="button" data-action="table" title="表格">&#x2637;</button>
+                <button type="button" data-action="table" title="表格（光标在表格内时打开编辑，否则新建）">&#x2637;</button>
                 <button type="button" data-action="hr" title="分割线">&mdash;</button>
                 <button type="button" data-action="color" title="文字颜色" style="color:var(--accent);font-weight:bold;">A&#x25c9;</button>
                 <button type="button" data-action="hex" title="取色器（插入 #RRGGBB）" style="font-weight:bold;">#</button>
@@ -165,6 +279,49 @@ $article_id = $article['id'] ?? '';
         </button>
     </div>
 
+    <!-- 表格编辑器弹窗 -->
+    <div class="modal" id="table-editor-modal" style="display:none">
+        <div class="modal-overlay" onclick="closeTableEditor()"></div>
+        <div class="modal-card" style="max-width:95vw;width:auto;min-width:600px;">
+            <h2>表格编辑器</h2>
+            <div class="table-editor-toolbar" id="table-editor-toolbar">
+                <button type="button" onclick="tblAddRow()" title="在当前行下方插入一行（未选中则在末尾追加）">+行</button>
+                <button type="button" onclick="tblAddCol()" title="在当前列右侧插入一列（未选中则在末尾追加）">+列</button>
+                <button type="button" onclick="tblDelRow()" title="删除当前行（未选中则删除最后一行）">-行</button>
+                <button type="button" onclick="tblDelCol()" title="删除当前列（未选中则删除最后一列）">-列</button>
+                <span class="toolbar-sep"></span>
+                <button type="button" onclick="tblMergeCells()" title="合并选中单元格">合并</button>
+                <button type="button" onclick="tblSplitCell()" title="拆分选中单元格">拆分</button>
+                <span class="toolbar-sep"></span>
+                <button type="button" onclick="tblToggleHeader()" title="切换表头行">表头</button>
+                <button type="button" onclick="tblSetAlign('left')" title="左对齐">≡</button>
+                <button type="button" onclick="tblSetAlign('center')" title="居中">≡</button>
+                <button type="button" onclick="tblSetAlign('right')" title="右对齐">≡</button>
+                <span class="toolbar-sep"></span>
+                <button type="button" onclick="tblSelectCol()" title="全选当前列">选列</button>
+                <button type="button" onclick="tblSelectRow()" title="全选当前行">选行</button>
+            </div>
+            <div class="table-editor-formula-bar">
+                <span class="tbl-formula-label">fx</span>
+                <input type="text" id="tbl-formula-input" placeholder="=SUM(A1:A4) 或输入自然语言，如『求这列的平均值』" onkeydown="if(event.key==='Enter')tblEvalFormula()">
+                <button type="button" class="btn btn-sm btn-primary" onclick="tblEvalFormula()">计算</button>
+                <span class="tbl-nl-hint" title="可直接用自然语言描述计算需求，如『算一下这列的总和』『这行最大的是多少』">自然语言可用</span>
+                <span id="tbl-formula-result" style="font-size:0.78rem;color:var(--accent);margin-left:8px;display:none;"></span>
+            </div>
+            <div class="table-editor-grid-wrap" id="table-editor-grid-wrap">
+                <table class="table-editor-grid" id="table-editor-grid"></table>
+            </div>
+            <div class="modal-actions" style="margin-top:12px;display:flex;align-items:center;gap:8px;">
+                <label style="display:flex;align-items:center;gap:4px;font-size:0.78rem;color:var(--text-muted);font-family:var(--font-ui);cursor:pointer;">
+                    <input type="checkbox" id="tbl-striped" onchange="tblToggleStriped()"> 条纹行
+                </label>
+                <div style="flex:1;"></div>
+                <button type="button" class="btn" onclick="closeTableEditor()">取消</button>
+                <button type="button" class="btn btn-primary" onclick="insertTableFromEditor()">插入表格</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 图片裁剪弹窗 -->
     <div class="modal" id="crop-modal" style="display:none">
         <div class="modal-overlay" onclick="closeCropModal()"></div>
@@ -195,7 +352,9 @@ $article_id = $article['id'] ?? '';
     <script>
     window.articleId = <?= json_encode($article_id) ?>;
     window.isEdit = <?= json_encode($edit_mode) ?>;
+    window.editorMode = 'default';
     document.getElementById('article-content').addEventListener('mouseup', updateAIReference);
     document.getElementById('article-content').addEventListener('keyup', updateAIReference);
     </script>
 </div>
+<?php endif; ?>
