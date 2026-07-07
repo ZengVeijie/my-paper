@@ -3065,13 +3065,9 @@ select[multiple].ai-picker option:checked {
     background: var(--border-light);
 }
 
-/* Range highlight strips in cells */
+/* Range highlight: colored bottom border strip (color via inline style) */
 .cal-has-range {
-    background: linear-gradient(to bottom, var(--bg-card) 0%, var(--bg-card) 60%, rgba(59,130,246,0.1) 100%);
-}
-
-.cal-cell-empty.cal-has-range {
-    background: rgba(59,130,246,0.06);
+    /* border-strip color set via inline box-shadow */
 }
 
 .cal-range-label {

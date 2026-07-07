@@ -225,20 +225,45 @@ function render_calendar_html(array $cal, int $year, int $month): string {
 
         $cell_ranges = $day_ranges[$d] ?? [];
         $has_ranges = !empty($cell_ranges);
-        if ($has_ranges) $extra_cls .= ' cal-has-range';
 
-        $h .= '<div class="cal-cell' . $today_class . $extra_cls . '" data-date="' . $date_str . '">';
+        // Build cell class + inline style for range bottom-border strips
+        $inline_style = '';
+        if ($has_ranges) {
+            $extra_cls .= ' cal-has-range';
+            $shadows = [];
+            $titles = [];
+            $offset = 0;
+            foreach ($cell_ranges as $ri) {
+                $r = $ranges[$ri];
+                $ci = $ri % count($colors);
+                $shadows[] = 'inset 0 -' . (3 + $offset) . 'px 0 ' . $colors[$ci]['bar'];
+                $offset += 3;
+                $prefix = $r['done'] ? '✓ ' : '';
+                $titles[] = $prefix . $r['text'];
+            }
+            $inline_style = ' style="' . h(implode(',', $shadows)) . '"';
+        }
+
+        $title_attr = '';
+        if ($has_ranges && !empty($titles)) {
+            $title_attr = ' title="' . h(implode(' | ', $titles)) . '"';
+        }
+
+        $h .= '<div class="cal-cell' . $today_class . $extra_cls . '" data-date="' . $date_str . '"' . $inline_style . $title_attr . '>';
         $h .= '<span class="cal-day" onclick="calQuickAdd(event, \'' . $date_str . '\')" title="点击添加待办">' . $d . '</span>';
         if ($holiday_label) {
             $h .= '<span class="cal-holiday-label">' . h($holiday_label) . '</span>';
         }
 
-        // Range labels
+        // Range labels — only on first day
         foreach ($cell_ranges as $ri) {
             $r = $ranges[$ri];
-            $ci = $ri % count($colors);
-            $done_cls = $r['done'] ? ' done' : '';
-            $h .= '<span class="cal-range-label' . $done_cls . '" style="background:' . $colors[$ci]['bar'] . ';">' . h($r['text']) . '</span>';
+            $r_start_d = (int)substr($r['date_start'], 8, 2);
+            if ($d === $r_start_d) {
+                $ci = $ri % count($colors);
+                $done_cls = $r['done'] ? ' done' : '';
+                $h .= '<span class="cal-range-label' . $done_cls . '" style="background:' . $colors[$ci]['bar'] . ';">' . h($r['text']) . '</span>';
+            }
         }
 
         // Article links
