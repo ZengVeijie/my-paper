@@ -3,6 +3,16 @@
  * 平静之心 - 日历功能
  */
 
+define('CAL_RANGE_COLORS', [
+    ['bg' => 'rgba(59,130,246,0.18)', 'bar' => 'rgba(59,130,246,0.55)'],
+    ['bg' => 'rgba(16,185,129,0.18)', 'bar' => 'rgba(16,185,129,0.55)'],
+    ['bg' => 'rgba(245,158,11,0.18)', 'bar' => 'rgba(245,158,11,0.55)'],
+    ['bg' => 'rgba(239,68,68,0.18)', 'bar' => 'rgba(239,68,68,0.55)'],
+    ['bg' => 'rgba(139,92,246,0.18)', 'bar' => 'rgba(139,92,246,0.55)'],
+    ['bg' => 'rgba(236,72,153,0.18)', 'bar' => 'rgba(236,72,153,0.55)'],
+    ['bg' => 'rgba(20,184,166,0.18)', 'bar' => 'rgba(20,184,166,0.55)'],
+]);
+
 function parse_due_from_line(string $line): ?array {
     if (!preg_match('/@due\((\d{4}-\d{2}-\d{2})(?:~(\d{4}-\d{2}-\d{2}))?\)/', $line, $m)) {
         return null;
@@ -69,7 +79,7 @@ function build_calendar_data(int $year, int $month, array $articles): array {
     }
 
     $month_str = sprintf('%04d-%02d', $year, $month);
-    $ranges = []; // multi-day task ranges for Gantt bars
+    $ranges = [];
 
     foreach ($articles as $art) {
         $created = substr($art['created_at'] ?? '', 0, 10);
@@ -88,7 +98,6 @@ function build_calendar_data(int $year, int $month, array $articles): array {
             if ($t_month !== $month_str || !isset($days[$t_day])) continue;
 
             if ($task['is_range']) {
-                // Collect range tasks separately
                 $key = $task['article_id'] . '|' . md5($task['text']) . '|' . ($task['done'] ? '1' : '0');
                 if (!isset($ranges[$key])) {
                     $ranges[$key] = [
@@ -99,7 +108,6 @@ function build_calendar_data(int $year, int $month, array $articles): array {
                         'article_title' => $task['article_title'],
                     ];
                 } else {
-                    // Extend start/end if needed (for tasks that span across month boundary)
                     if ($task['date'] < $ranges[$key]['date_start']) $ranges[$key]['date_start'] = $task['date'];
                     if ($task['date_end'] && $task['date_end'] > $ranges[$key]['date_end']) $ranges[$key]['date_end'] = $task['date_end'];
                 }
@@ -109,7 +117,7 @@ function build_calendar_data(int $year, int $month, array $articles): array {
         }
     }
 
-    // Clamp range start/end to visible month
+    // Clamp ranges to visible month
     $month_start = sprintf('%04d-%02d-01', $year, $month);
     $month_end = sprintf('%04d-%02d-%02d', $year, $month, $days_in_month);
     $ranges_out = [];
@@ -138,9 +146,21 @@ function build_calendar_data(int $year, int $month, array $articles): array {
 function render_calendar_html(array $cal, int $year, int $month): string {
     $week_headers = ['一', '二', '三', '四', '五', '六', '日'];
     $today_str = date('Y-m-d');
+    $colors = CAL_RANGE_COLORS;
 
     $prev = $cal['prev_month'];
     $next = $cal['next_month'];
+
+    // Build a map: day → list of range indices
+    $ranges = $cal['ranges'] ?? [];
+    $day_ranges = []; // $day_ranges[day_num] = [range_idx, ...]
+    foreach ($ranges as $ri => $r) {
+        $start_d = (int)substr($r['date_start'], 8, 2);
+        $end_d = (int)substr($r['date_end'], 8, 2);
+        for ($d = $start_d; $d <= $end_d; $d++) {
+            $day_ranges[$d][] = $ri;
+        }
+    }
 
     $h = '<div class="home-section-header">';
     $h .= '<h2>' . $year . '年' . $month . '月</h2>';
@@ -150,8 +170,7 @@ function render_calendar_html(array $cal, int $year, int $month): string {
     $h .= '<a href="?cal_year=' . $next['year'] . '&cal_month=' . $next['month'] . '" class="btn btn-sm">' . $next['month'] . '月 &raquo;</a>';
     $h .= '</div></div>';
 
-    $h .= '<div class="calendar-grid-wrap" id="calendar-grid-wrap">';
-    $h .= '<div class="calendar-grid" id="calendar-grid">';
+    $h .= '<div class="calendar-grid">';
 
     foreach ($week_headers as $wh) {
         $h .= '<div class="cal-header">' . $wh . '</div>';
@@ -166,9 +185,25 @@ function render_calendar_html(array $cal, int $year, int $month): string {
         $today_class = ($date_str === $today_str) ? ' today' : '';
         $cell = $cal['days'][$d] ?? ['articles' => [], 'tasks' => []];
 
-        $h .= '<div class="cal-cell' . $today_class . '" data-date="' . $date_str . '">';
+        // Range strips for this day
+        $cell_ranges = $day_ranges[$d] ?? [];
+        $has_ranges = !empty($cell_ranges);
+
+        $h .= '<div class="cal-cell' . $today_class . ($has_ranges ? ' cal-has-range' : '') . '" data-date="' . $date_str . '">';
         $h .= '<span class="cal-day">' . $d . '</span>';
 
+        // Range labels (only shown on the first day of each range)
+        foreach ($cell_ranges as $ri) {
+            $r = $ranges[$ri];
+            $r_start_d = (int)substr($r['date_start'], 8, 2);
+            if ($d === $r_start_d) {
+                $ci = $ri % count($colors);
+                $done_cls = $r['done'] ? ' done' : '';
+                $h .= '<span class="cal-range-label' . $done_cls . '" style="background:' . $colors[$ci]['bar'] . ';" title="' . h($r['article_title']) . '">' . h($r['text']) . '</span>';
+            }
+        }
+
+        // Article links
         $arts = $cell['articles'];
         if ($arts) {
             $h .= '<div class="cal-articles">';
@@ -178,10 +213,11 @@ function render_calendar_html(array $cal, int $year, int $month): string {
             $h .= '</div>';
         }
 
+        // Single-day task items
         $todos = $cell['tasks'];
         if ($todos) {
             $h .= '<div class="cal-tasks">';
-            $max_show = 4;
+            $max_show = 3;
             $shown = 0;
             foreach ($todos as $task) {
                 if ($shown >= $max_show) break;
@@ -201,23 +237,5 @@ function render_calendar_html(array $cal, int $year, int $month): string {
     }
 
     $h .= '</div>'; // .calendar-grid
-
-    // Gantt bars layer
-    $ranges = $cal['ranges'] ?? [];
-    if ($ranges) {
-        $ranges_json = [];
-        foreach ($ranges as $r) {
-            $ranges_json[] = [
-                'start' => $r['date_start'],
-                'end' => $r['date_end'],
-                'text' => $r['text'],
-                'done' => $r['done'],
-                'title' => $r['article_title'],
-            ];
-        }
-        $h .= '<script id="cal-range-data" type="application/json">' . json_encode($ranges_json, JSON_UNESCAPED_UNICODE) . '</script>';
-    }
-
-    $h .= '</div>'; // .calendar-grid-wrap
     return $h;
 }
