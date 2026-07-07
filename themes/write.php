@@ -173,6 +173,7 @@ $editor_mode = $user['editor_mode'] ?? 'default';
                 <button type="button" data-action="ul" title="无序列表">&bull;</button>
                 <button type="button" data-action="ol" title="有序列表">1.</button>
                 <button type="button" data-action="checklist" title="任务清单">☑</button>
+                <button type="button" data-action="due" title="为任务添加截止日期 @due(YYYY-MM-DD)" style="font-size:0.78rem;">📅</button>
                 <span class="toolbar-sep"></span>
                 <button type="button" data-action="link" title="链接">&#x1f517;</button>
                 <button type="button" data-action="image" title="图片">&#x1f5bc;</button>
@@ -189,6 +190,13 @@ $editor_mode = $user['editor_mode'] ?? 'default';
                 <span class="toolbar-sep"></span>
                 <button type="button" id="crop-btn" title="裁剪图片">&nbsp;✂&nbsp;</button>
                 <span class="toolbar-sep"></span>
+                <div id="due-date-popover" style="display:none;position:absolute;z-index:1000;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px;box-shadow:0 4px 16px rgba(0,0,0,0.15);">
+                    <div style="display:flex;gap:6px;align-items:center;">
+                        <input type="date" id="due-date-input" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:0.85rem;font-family:var(--font-ui);">
+                        <button type="button" class="btn btn-sm btn-primary" onclick="insertDueDate()">确定</button>
+                        <button type="button" class="btn btn-sm" onclick="document.getElementById('due-date-popover').style.display='none'">取消</button>
+                    </div>
+                </div>
                 <button type="button" id="upload-btn" title="上传图片或文件（也可直接拖拽到编辑器或粘贴图片）" class="editor-toolbar-upload">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
                 </button>

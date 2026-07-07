@@ -393,9 +393,105 @@ function toolbarAction(textarea, action) {
         case 'hex':
             showHexPicker(textarea, start, end);
             return;
+        case 'due':
+            showDuePicker(textarea);
+            return;
     }
 
     applyToolbar(textarea, before, after, sel, start, end);
+}
+
+// ===== 截止日期选择器 =====
+
+var _dueTextarea = null;
+
+function getCurrentLine(textarea) {
+    var cursor = textarea.selectionStart;
+    var before = textarea.value.substring(0, cursor);
+    var after = textarea.value.substring(cursor);
+    var lineStart = before.lastIndexOf('\n') + 1;
+    var lineEnd = after.indexOf('\n');
+    if (lineEnd === -1) lineEnd = after.length;
+    return textarea.value.substring(lineStart, cursor + lineEnd);
+}
+
+function showDuePicker(textarea) {
+    _dueTextarea = textarea;
+    var popover = document.getElementById('due-date-popover');
+    var btn = textarea.parentNode.querySelector('[data-action="due"]');
+    if (!popover || !btn) return;
+
+    // Pre-fill with existing @due if cursor is on a checklist line with one
+    var line = getCurrentLine(textarea);
+    var m = line.match(/@due\((\d{4}-\d{2}-\d{2})/);
+    var dateInput = document.getElementById('due-date-input');
+    dateInput.value = m ? m[1] : '';
+
+    // Position popover below the button
+    var rect = btn.getBoundingClientRect();
+    popover.style.top = (rect.bottom + 4) + 'px';
+    popover.style.left = Math.min(rect.left, window.innerWidth - 320) + 'px';
+    popover.style.display = 'block';
+
+    dateInput.focus();
+    dateInput.onkeydown = function(e) {
+        if (e.key === 'Enter') insertDueDate();
+        if (e.key === 'Escape') popover.style.display = 'none';
+    };
+
+    setTimeout(function() {
+        document.addEventListener('click', closeDuePopoverOnClickOutside);
+    }, 0);
+}
+
+function closeDuePopoverOnClickOutside(e) {
+    var popover = document.getElementById('due-date-popover');
+    if (!popover || popover.style.display === 'none') {
+        document.removeEventListener('click', closeDuePopoverOnClickOutside);
+        return;
+    }
+    if (!popover.contains(e.target) && e.target.getAttribute('data-action') !== 'due') {
+        popover.style.display = 'none';
+        document.removeEventListener('click', closeDuePopoverOnClickOutside);
+    }
+}
+
+function insertDueDate() {
+    var dateInput = document.getElementById('due-date-input');
+    var dateStr = dateInput.value;
+    if (!dateStr || !_dueTextarea) return;
+
+    var ta = _dueTextarea;
+    var cursor = ta.selectionStart;
+    var before = ta.value.substring(0, cursor);
+    var lastNL = before.lastIndexOf('\n');
+    var lineStart = lastNL + 1;
+    var lineEnd = ta.value.indexOf('\n', cursor);
+    if (lineEnd === -1) lineEnd = ta.value.length;
+
+    var line = ta.value.substring(lineStart, lineEnd);
+    // Only operate on checklist lines
+    if (!/^\s*- \[[ x]\]/.test(line)) {
+        document.getElementById('due-date-popover').style.display = 'none';
+        return;
+    }
+
+    var newLine;
+    var newMarker = '@due(' + dateStr + ')';
+    if (/@due\([^)]+\)/.test(line)) {
+        newLine = line.replace(/@due\([^)]+\)/, newMarker);
+    } else {
+        // strip existing (完成于...) before appending
+        var stripped = line.replace(/\s*\(完成于.*?\)$/, '');
+        newLine = stripped + ' ' + newMarker;
+    }
+
+    var newVal = ta.value.substring(0, lineStart) + newLine + ta.value.substring(lineEnd);
+    ta.value = newVal;
+    ta.focus();
+    ta.selectionStart = ta.selectionEnd = lineStart + newLine.length;
+    document.getElementById('due-date-popover').style.display = 'none';
+    _dueTextarea = null;
 }
 
 // ===== 文字颜色（包裹 span） =====
