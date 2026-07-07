@@ -192,15 +192,12 @@ function render_calendar_html(array $cal, int $year, int $month): string {
         $h .= '<div class="cal-cell' . $today_class . ($has_ranges ? ' cal-has-range' : '') . '" data-date="' . $date_str . '">';
         $h .= '<span class="cal-day">' . $d . '</span>';
 
-        // Range labels (only shown on the first day of each range)
+        // Range labels on every day in the range
         foreach ($cell_ranges as $ri) {
             $r = $ranges[$ri];
-            $r_start_d = (int)substr($r['date_start'], 8, 2);
-            if ($d === $r_start_d) {
-                $ci = $ri % count($colors);
-                $done_cls = $r['done'] ? ' done' : '';
-                $h .= '<span class="cal-range-label' . $done_cls . '" style="background:' . $colors[$ci]['bar'] . ';" title="' . h($r['article_title']) . '">' . h($r['text']) . '</span>';
-            }
+            $ci = $ri % count($colors);
+            $done_cls = $r['done'] ? ' done' : '';
+            $h .= '<span class="cal-range-label' . $done_cls . '" style="background:' . $colors[$ci]['bar'] . ';" title="' . h($r['article_title']) . '">' . h($r['text']) . '</span>';
         }
 
         // Article links
