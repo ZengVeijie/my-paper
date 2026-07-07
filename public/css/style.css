@@ -3055,14 +3055,41 @@ select[multiple].ai-picker option:checked {
     align-items: center;
 }
 
-.calendar-grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 2px;
+.calendar-grid-wrap {
+    position: relative;
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     overflow: hidden;
     background: var(--border-light);
+}
+
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+}
+
+/* Gantt-style range bars */
+.cal-range-bar {
+    position: absolute;
+    height: 18px;
+    background: var(--accent);
+    opacity: 0.75;
+    border-radius: 4px;
+    font-size: 0.62rem;
+    line-height: 18px;
+    color: #fff;
+    padding: 0 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.cal-range-bar.done {
+    opacity: 0.4;
+    text-decoration: line-through;
 }
 
 .cal-header {

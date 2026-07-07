@@ -963,6 +963,82 @@ function closeLightbox() {
     if (lb) lb.classList.remove('open');
 }
 
+// ===== 日历甘特条 =====
+
+function renderCalRanges() {
+    var dataEl = document.getElementById('cal-range-data');
+    if (!dataEl) return;
+    var ranges;
+    try { ranges = JSON.parse(dataEl.textContent); } catch(e) { return; }
+    if (!ranges.length) return;
+
+    var grid = document.getElementById('calendar-grid');
+    var wrap = document.getElementById('calendar-grid-wrap');
+    if (!grid || !wrap) return;
+
+    // Collect cell positions keyed by date
+    var cells = grid.querySelectorAll('.cal-cell[data-date]');
+    var cellMap = {};
+    cells.forEach(function(c) { cellMap[c.getAttribute('data-date')] = c; });
+
+    // Assign tracks (stacking layers for overlapping ranges)
+    var tracks = []; // tracks[i] = end date string of what occupies track i
+    var rangeTracks = []; // { range: range, track: N }
+
+    ranges.forEach(function(r) {
+        var track = -1;
+        for (var t = 0; t < tracks.length; t++) {
+            if (!tracks[t] || tracks[t] < r.start) { track = t; break; }
+        }
+        if (track === -1) track = tracks.length;
+        tracks[track] = r.end;
+        rangeTracks.push({ range: r, track: track });
+    });
+
+    // Build bars
+    rangeTracks.forEach(function(rt) {
+        var r = rt.range;
+        var cellStart = cellMap[r.start];
+        var cellEnd = cellMap[r.end];
+        if (!cellStart || !cellEnd) return;
+
+        var bar = document.createElement('div');
+        bar.className = 'cal-range-bar' + (r.done ? ' done' : '');
+        bar.title = r.text + '  (' + r.title + ')';
+        bar.textContent = r.text;
+        bar.style.setProperty('--range-track', rt.track);
+        bar.dataset.start = r.start;
+        bar.dataset.end = r.end;
+
+        wrap.appendChild(bar);
+    });
+
+    // Position bars relative to cells
+    function positionBars() {
+        var wrapRect = wrap.getBoundingClientRect();
+        var bars = wrap.querySelectorAll('.cal-range-bar');
+        bars.forEach(function(bar) {
+            var cellStart = cellMap[bar.dataset.start];
+            var cellEnd = cellMap[bar.dataset.end];
+            if (!cellStart || !cellEnd) return;
+            var sr = cellStart.getBoundingClientRect();
+            var er = cellEnd.getBoundingClientRect();
+            bar.style.left = (sr.left - wrapRect.left) + 'px';
+            bar.style.width = (er.right - sr.left) + 'px';
+            bar.style.top = (sr.bottom - wrapRect.top + 2 + parseInt(bar.style.getPropertyValue('--range-track')) * 20) + 'px';
+        });
+    }
+
+    // Reserve space below grid for bars
+    var maxTrack = rangeTracks.reduce(function(m, rt) { return Math.max(m, rt.track); }, 0);
+    wrap.style.paddingBottom = ((maxTrack + 1) * 20 + 8) + 'px';
+
+    positionBars();
+    window.addEventListener('resize', positionBars);
+}
+
+document.addEventListener('DOMContentLoaded', renderCalRanges);
+
 // 给文章中所有图片绑定点击事件
 document.addEventListener('click', (e) => {
     if (e.target.tagName === 'IMG' && e.target.closest('.rendered-content, .article-body')) {
