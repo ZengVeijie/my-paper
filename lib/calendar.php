@@ -265,15 +265,14 @@ function render_calendar_html(array $cal, int $year, int $month): string {
             $h .= '<span class="cal-holiday-label">' . h($holiday_label) . '</span>';
         }
 
-        // Range labels — only on first day
+        // Range labels — clickable to toggle done/undone
         foreach ($cell_ranges as $ri) {
             $r = $ranges[$ri];
             $r_start_d = (int)substr($r['date_start'], 8, 2);
-            if ($d === $r_start_d) {
-                $ci = $ri % count($colors);
-                $done_cls = $r['done'] ? ' done' : '';
-                $h .= '<span class="cal-range-label' . $done_cls . '" style="background:' . $colors[$ci]['bar'] . ';">' . h($r['text']) . '</span>';
-            }
+            $ci = $ri % count($colors);
+            $done_cls = $r['done'] ? ' done' : '';
+            $label = ($d === $r_start_d) ? h($r['text']) : '&nbsp;';
+            $h .= '<span class="cal-range-label' . $done_cls . '" style="background:' . $colors[$ci]['bar'] . ';" data-aid="' . h($r['article_id']) . '" data-li="' . $r['line_index'] . '" onclick="calToggleTask(this)" title="点击切换完成状态">' . $label . '</span>';
         }
 
         // Article links

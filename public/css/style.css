@@ -3082,10 +3082,17 @@ select[multiple].ai-picker option:checked {
     overflow-wrap: break-word;
     margin-top: 2px;
     font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    min-height: 4px;
+}
+
+.cal-range-label:hover {
+    opacity: 0.8;
 }
 
 .cal-range-label.done {
-    opacity: 0.5;
+    opacity: 0.4;
     text-decoration: line-through;
 }
 
