@@ -132,12 +132,12 @@ function render_calendar_html(array $cal, int $year, int $month): string {
         $h .= '<div class="cal-cell' . $today_class . '">';
         $h .= '<span class="cal-day">' . $d . '</span>';
 
-        // article dots
+        // article links
         $arts = $cell['articles'];
         if ($arts) {
             $h .= '<div class="cal-articles">';
             foreach ($arts as $art) {
-                $h .= '<a href="/article/' . h($art['id']) . '" class="cal-art-dot" title="' . h($art['title']) . '"></a>';
+                $h .= '<a href="/article/' . h($art['id']) . '" class="cal-art-link" title="' . h($art['title']) . '">' . h($art['title']) . '</a>';
             }
             $h .= '</div>';
         }

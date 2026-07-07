@@ -29,7 +29,7 @@ $cal_month = $cal_month ?? (int)date('m');
     </form>
 </div>
 
-<?php if (!empty($homepage_calendar) && !empty($calendar)): ?>
+<?php if (!empty($homepage_calendar) && !empty($calendar) && $search === ''): ?>
 <section class="home-section calendar-section">
     <?= render_calendar_html($calendar, $cal_year, $cal_month) ?>
 </section>
