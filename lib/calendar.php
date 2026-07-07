@@ -287,16 +287,21 @@ function render_calendar_html(array $cal, int $year, int $month): string {
                 'title' => $task['article_title'],
             ];
         }
-        // Range tasks (shown on every day, same format)
+        // Range tasks — text only on first/last day, prefix color matches strip
         foreach ($cell_ranges as $ri) {
             $r = $ranges[$ri];
-            $all_tasks[] = [
-                'text' => $r['text'],
-                'done' => $r['done'],
-                'article_id' => $r['article_id'],
-                'line_index' => $r['line_index'],
-                'title' => $r['article_title'],
-            ];
+            $r_start_d = (int)substr($r['date_start'], 8, 2);
+            $r_end_d = (int)substr($r['date_end'], 8, 2);
+            if ($d === $r_start_d || $d === $r_end_d) {
+                $all_tasks[] = [
+                    'text' => $r['text'],
+                    'done' => $r['done'],
+                    'article_id' => $r['article_id'],
+                    'line_index' => $r['line_index'],
+                    'title' => $r['article_title'],
+                    'color' => $colors[$ri % count($colors)]['bar'],
+                ];
+            }
         }
 
         if ($all_tasks) {
@@ -306,8 +311,14 @@ function render_calendar_html(array $cal, int $year, int $month): string {
             foreach ($all_tasks as $task) {
                 if ($shown >= $max_show) break;
                 $cls = $task['done'] ? 'cal-task-item done' : 'cal-task-item';
-                $prefix = $task['done'] ? '&#10003; ' : '&#9711; ';
-                $h .= '<span class="' . $cls . '" data-aid="' . h($task['article_id']) . '" data-li="' . $task['line_index'] . '" onclick="calToggleTask(this)" title="' . h($task['title']) . ' — 点击切换完成状态">' . $prefix . h($task['text']) . '</span>';
+                $color_attr = '';
+                if (!empty($task['color'])) {
+                    $prefix = $task['done'] ? '&#10003; ' : '&#9711; ';
+                    $color_attr = ' style="color:' . $task['color'] . '"';
+                } else {
+                    $prefix = $task['done'] ? '&#10003; ' : '&#9711; ';
+                }
+                $h .= '<span class="' . $cls . '" data-aid="' . h($task['article_id']) . '" data-li="' . $task['line_index'] . '" onclick="calToggleTask(this)" title="' . h($task['title']) . ' — 点击切换完成状态"' . $color_attr . '>' . $prefix . h($task['text']) . '</span>';
                 $shown++;
             }
             $remaining = count($all_tasks) - $max_show;
