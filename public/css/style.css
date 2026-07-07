@@ -3123,11 +3123,38 @@ select[multiple].ai-picker option:checked {
     border-radius: 2px;
 }
 
+/* Weekend */
+.cal-weekend {
+    background: rgba(0,0,0,0.03);
+}
+
+/* Holiday */
+.cal-holiday {
+    background: rgba(239,68,68,0.06);
+}
+
+.cal-holiday-label {
+    font-size: 0.58rem;
+    color: #dc3545;
+    font-weight: 600;
+    line-height: 1;
+}
+
 .cal-day {
     font-size: 0.85rem;
     font-weight: 600;
     color: var(--text);
     line-height: 1;
+    cursor: pointer;
+    user-select: none;
+    padding: 2px 4px;
+    margin: -2px -4px;
+    border-radius: 3px;
+    transition: background 0.15s;
+}
+
+.cal-day:hover {
+    background: var(--accent-light, rgba(0,123,255,0.1));
 }
 
 .cal-cell.today .cal-day {
@@ -3170,6 +3197,15 @@ select[multiple].ai-picker option:checked {
     word-break: break-all;
     overflow-wrap: break-word;
     white-space: normal;
+    cursor: pointer;
+    padding: 1px 3px;
+    margin: -1px -3px;
+    border-radius: 2px;
+    transition: background 0.15s;
+}
+
+.cal-task-item:hover {
+    background: rgba(0,0,0,0.06);
 }
 
 .cal-task-item.done {
@@ -3181,6 +3217,34 @@ select[multiple].ai-picker option:checked {
     font-size: 0.6rem;
     color: var(--text-muted);
     margin-top: 1px;
+}
+
+/* Quick-add popover */
+.cal-quick-add {
+    display: none;
+    position: fixed;
+    z-index: 9999;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.18);
+    gap: 6px;
+    align-items: center;
+}
+
+.cal-quick-add input {
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-family: var(--font-ui);
+    min-width: 160px;
+    outline: none;
+}
+
+.cal-quick-add input:focus {
+    border-color: var(--accent);
 }
 
 @media (max-width: 768px) {

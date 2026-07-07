@@ -963,6 +963,85 @@ function closeLightbox() {
     if (lb) lb.classList.remove('open');
 }
 
+// ===== 日历交互：快速添加待办 + 切换完成状态 =====
+
+function calQuickAdd(e, dateStr) {
+    e.stopPropagation();
+    // Remove any existing popover
+    var existing = document.getElementById('cal-quick-add');
+    if (existing) existing.remove();
+
+    var pop = document.createElement('div');
+    pop.id = 'cal-quick-add';
+    pop.className = 'cal-quick-add';
+    pop.innerHTML = '<input type="text" id="cal-quick-input" placeholder="待办事项..."><button type="button" class="btn btn-sm btn-primary" id="cal-quick-btn">添加</button>';
+    document.body.appendChild(pop);
+
+    var rect = e.target.getBoundingClientRect();
+    pop.style.top = (rect.bottom + 4) + 'px';
+    pop.style.left = Math.min(rect.left, window.innerWidth - 240) + 'px';
+    pop.style.display = 'flex';
+
+    var input = document.getElementById('cal-quick-input');
+    input.focus();
+    input.dataset.date = dateStr;
+
+    var add = function() {
+        var task = input.value.trim();
+        if (!task) { pop.remove(); return; }
+        var btn = document.getElementById('cal-quick-btn');
+        btn.disabled = true;
+        btn.textContent = '...';
+        fetch('/api/calendar/add-todo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ task: task, date: input.dataset.date })
+        }).then(function(r) { return r.json(); }).then(function(data) {
+            if (data.ok) location.reload();
+            else { alert(data.error || '添加失败'); pop.remove(); }
+        }).catch(function() { pop.remove(); });
+    };
+
+    input.onkeydown = function(ev) { if (ev.key === 'Enter') add(); if (ev.key === 'Escape') pop.remove(); };
+    document.getElementById('cal-quick-btn').onclick = add;
+
+    setTimeout(function() {
+        document.addEventListener('click', function closePop(ev) {
+            if (!pop.contains(ev.target) && ev.target !== e.target) {
+                pop.remove();
+                document.removeEventListener('click', closePop);
+            }
+        });
+    }, 0);
+}
+
+async function calToggleTask(el) {
+    var aid = el.dataset.aid;
+    var li = parseInt(el.dataset.li);
+    if (!aid || isNaN(li)) return;
+    var isDone = el.classList.contains('done');
+    try {
+        var resp = await fetch('/api/articles/' + aid + '/toggle-task', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ line_index: li, checked: !isDone })
+        });
+        var data = await resp.json();
+        if (data.ok) location.reload();
+        else alert(data.error || '操作失败');
+    } catch(err) {
+        alert('操作失败: ' + err.message);
+    }
+}
+
+// 关闭日历弹窗的全局点击
+document.addEventListener('click', function(e) {
+    var pop = document.getElementById('cal-quick-add');
+    if (pop && !pop.contains(e.target) && !e.target.classList.contains('cal-day')) {
+        pop.remove();
+    }
+});
+
 // 给文章中所有图片绑定点击事件
 document.addEventListener('click', (e) => {
     if (e.target.tagName === 'IMG' && e.target.closest('.rendered-content, .article-body')) {

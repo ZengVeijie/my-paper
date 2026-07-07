@@ -13,6 +13,32 @@ define('CAL_RANGE_COLORS', [
     ['bg' => 'rgba(20,184,166,0.18)', 'bar' => 'rgba(20,184,166,0.55)'],
 ]);
 
+// Chinese public holidays (month-day => label), hardcoded for current year
+function get_holidays(int $year): array {
+    $map = [
+        '01-01' => '元旦',
+        '05-01' => '劳动节',
+        '10-01' => '国庆节',
+    ];
+    // Lunar-based holidays (approximate solar dates)
+    $lunar = [
+        2026 => ['02-17' => '春节', '02-18' => '春节', '02-19' => '春节', '02-20' => '春节', '02-21' => '春节', '02-22' => '春节', '02-23' => '春节',
+                  '04-03' => '清明节', '06-19' => '端午节', '09-25' => '中秋节'],
+        2027 => ['02-06' => '春节', '02-07' => '春节', '02-08' => '春节', '02-09' => '春节', '02-10' => '春节', '02-11' => '春节', '02-12' => '春节',
+                  '04-05' => '清明节', '06-09' => '端午节', '09-14' => '中秋节'],
+    ];
+    $holidays = $map;
+    if (isset($lunar[$year])) {
+        foreach ($lunar[$year] as $d => $n) $holidays[$d] = $n;
+    }
+    return $holidays;
+}
+
+function is_weekend(string $date_str): bool {
+    $dow = (int)date('N', strtotime($date_str));
+    return $dow >= 6; // 6=Sat, 7=Sun
+}
+
 function parse_due_from_line(string $line): ?array {
     if (!preg_match('/@due\((\d{4}-\d{2}-\d{2})(?:~(\d{4}-\d{2}-\d{2}))?\)/', $line, $m)) {
         return null;
@@ -58,6 +84,7 @@ function parse_article_due_tasks(array $article): array {
                 'is_range' => $is_range,
                 'article_id' => $article['id'],
                 'article_title' => $article['title'] ?: '无标题',
+                'line_index' => $i,
             ];
         }
     }
@@ -106,6 +133,8 @@ function build_calendar_data(int $year, int $month, array $articles): array {
                         'date_start' => $task['date'],
                         'date_end' => $task['date_end'],
                         'article_title' => $task['article_title'],
+                        'article_id' => $task['article_id'],
+                        'line_index' => $task['line_index'],
                     ];
                 } else {
                     if ($task['date'] < $ranges[$key]['date_start']) $ranges[$key]['date_start'] = $task['date'];
@@ -147,13 +176,13 @@ function render_calendar_html(array $cal, int $year, int $month): string {
     $week_headers = ['一', '二', '三', '四', '五', '六', '日'];
     $today_str = date('Y-m-d');
     $colors = CAL_RANGE_COLORS;
+    $holidays = get_holidays($year);
 
     $prev = $cal['prev_month'];
     $next = $cal['next_month'];
 
-    // Build a map: day → list of range indices
     $ranges = $cal['ranges'] ?? [];
-    $day_ranges = []; // $day_ranges[day_num] = [range_idx, ...]
+    $day_ranges = [];
     foreach ($ranges as $ri => $r) {
         $start_d = (int)substr($r['date_start'], 8, 2);
         $end_d = (int)substr($r['date_end'], 8, 2);
@@ -185,19 +214,31 @@ function render_calendar_html(array $cal, int $year, int $month): string {
         $today_class = ($date_str === $today_str) ? ' today' : '';
         $cell = $cal['days'][$d] ?? ['articles' => [], 'tasks' => []];
 
-        // Range strips for this day
+        // Weekend / holiday classes
+        $extra_cls = '';
+        $holiday_label = $holidays[substr($date_str, 5)] ?? null;
+        if ($holiday_label) {
+            $extra_cls .= ' cal-holiday';
+        } elseif (is_weekend($date_str)) {
+            $extra_cls .= ' cal-weekend';
+        }
+
         $cell_ranges = $day_ranges[$d] ?? [];
         $has_ranges = !empty($cell_ranges);
+        if ($has_ranges) $extra_cls .= ' cal-has-range';
 
-        $h .= '<div class="cal-cell' . $today_class . ($has_ranges ? ' cal-has-range' : '') . '" data-date="' . $date_str . '">';
-        $h .= '<span class="cal-day">' . $d . '</span>';
+        $h .= '<div class="cal-cell' . $today_class . $extra_cls . '" data-date="' . $date_str . '">';
+        $h .= '<span class="cal-day" onclick="calQuickAdd(event, \'' . $date_str . '\')" title="点击添加待办">' . $d . '</span>';
+        if ($holiday_label) {
+            $h .= '<span class="cal-holiday-label">' . h($holiday_label) . '</span>';
+        }
 
-        // Range labels on every day in the range
+        // Range labels
         foreach ($cell_ranges as $ri) {
             $r = $ranges[$ri];
             $ci = $ri % count($colors);
             $done_cls = $r['done'] ? ' done' : '';
-            $h .= '<span class="cal-range-label' . $done_cls . '" style="background:' . $colors[$ci]['bar'] . ';" title="' . h($r['article_title']) . '">' . h($r['text']) . '</span>';
+            $h .= '<span class="cal-range-label' . $done_cls . '" style="background:' . $colors[$ci]['bar'] . ';">' . h($r['text']) . '</span>';
         }
 
         // Article links
@@ -210,7 +251,7 @@ function render_calendar_html(array $cal, int $year, int $month): string {
             $h .= '</div>';
         }
 
-        // Single-day task items
+        // Single-day task items (clickable to toggle)
         $todos = $cell['tasks'];
         if ($todos) {
             $h .= '<div class="cal-tasks">';
@@ -220,7 +261,7 @@ function render_calendar_html(array $cal, int $year, int $month): string {
                 if ($shown >= $max_show) break;
                 $cls = $task['done'] ? 'cal-task-item done' : 'cal-task-item';
                 $prefix = $task['done'] ? '&#10003; ' : '&#9711; ';
-                $h .= '<span class="' . $cls . '" title="' . h($task['article_title']) . '">' . $prefix . h($task['text']) . '</span>';
+                $h .= '<span class="' . $cls . '" data-aid="' . h($task['article_id']) . '" data-li="' . $task['line_index'] . '" onclick="calToggleTask(this)" title="' . h($task['article_title']) . ' — 点击切换完成状态">' . $prefix . h($task['text']) . '</span>';
                 $shown++;
             }
             $remaining = count($todos) - $max_show;
@@ -233,6 +274,6 @@ function render_calendar_html(array $cal, int $year, int $month): string {
         $h .= '</div>';
     }
 
-    $h .= '</div>'; // .calendar-grid
+    $h .= '</div>';
     return $h;
 }

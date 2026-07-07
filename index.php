@@ -263,6 +263,57 @@ $router->post('/api/articles/{id}/toggle-task', function($id) {
     json_response(['ok' => true, 'content' => $article['content']]);
 });
 
+// ==================== API: 日历快速添加待办 ====================
+
+$router->post('/api/calendar/add-todo', function() {
+    require_login();
+    $user = current_user();
+    $data = body_json();
+    $task = trim($data['task'] ?? '');
+    $date = trim($data['date'] ?? '');
+    if ($task === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+        json_response(['error' => '参数无效'], 400);
+    }
+
+    // Find or create "待办清单" article
+    $articles = json_list(DATA_DIR . '/articles');
+    $todo_article = null;
+    foreach ($articles as $a) {
+        if (($a['user_id'] ?? '') === $user['id'] && ($a['title'] ?? '') === '待办清单') {
+            $todo_article = $a;
+            break;
+        }
+    }
+
+    if (!$todo_article) {
+        $todo_article = [
+            'id' => bin2hex(random_bytes(16)),
+            'user_id' => $user['id'],
+            'title' => '待办清单',
+            'content' => '',
+            'summary' => '',
+            'tags' => [],
+            'collection_ids' => [],
+            'visibility' => 'private',
+            'pinned' => false,
+            'comment_count' => 0,
+            'sentiment' => null,
+            'created_at' => date('c'),
+            'updated_at' => date('c'),
+        ];
+    }
+
+    // Append new todo
+    $content = $todo_article['content'] ?? '';
+    if ($content !== '' && substr($content, -1) !== "\n") $content .= "\n";
+    $content .= '- [ ] ' . $task . ' @due(' . $date . ')' . "\n";
+    $todo_article['content'] = $content;
+    $todo_article['updated_at'] = date('c');
+
+    json_write(DATA_DIR . '/articles/' . $todo_article['id'] . '.json', $todo_article);
+    json_response(['ok' => true, 'article_id' => $todo_article['id'], 'article_title' => $todo_article['title']]);
+});
+
 // ==================== API: 草稿 ====================
 
 $router->post('/api/drafts', 'handle_save_draft');
