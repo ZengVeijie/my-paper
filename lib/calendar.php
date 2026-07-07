@@ -230,18 +230,27 @@ function render_calendar_html(array $cal, int $year, int $month): string {
         $inline_style = '';
         if ($has_ranges) {
             $extra_cls .= ' cal-has-range';
-            $shadows = [];
             $titles = [];
-            $offset = 0;
+            $n = count($cell_ranges);
+            $strip_h = $n * 4; // total height of all range strips
+            $stops = [];
+            // Start with normal cell background above the strips
+            $stops[] = 'var(--bg-card) 0%';
+            $stops[] = 'var(--bg-card) calc(100% - ' . $strip_h . 'px)';
+            // Each range gets a 4px strip, stacking upward from bottom
+            // range 0 = bottom strip, range 1 = above it, etc.
             foreach ($cell_ranges as $ri) {
                 $r = $ranges[$ri];
                 $ci = $ri % count($colors);
-                $shadows[] = 'inset 0 -' . (3 + $offset) . 'px 0 ' . $colors[$ci]['bar'];
-                $offset += 3;
+                $color = $colors[$ci]['bar'];
+                $top_from_bottom = ($n - $ri) * 4;
+                $bot_from_bottom = ($n - $ri - 1) * 4;
+                $stops[] = $color . ' calc(100% - ' . $top_from_bottom . 'px)';
+                $stops[] = $color . ' calc(100% - ' . $bot_from_bottom . 'px)';
                 $prefix = $r['done'] ? '✓ ' : '';
                 $titles[] = $prefix . $r['text'];
             }
-            $inline_style = ' style="' . h(implode(',', $shadows)) . '"';
+            $inline_style = ' style="background:linear-gradient(to bottom,' . implode(',', $stops) . ');"';
         }
 
         $title_attr = '';
