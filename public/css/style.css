@@ -3067,7 +3067,11 @@ select[multiple].ai-picker option:checked {
 
 /* Range highlight strips in cells */
 .cal-has-range {
-    position: relative;
+    background: linear-gradient(to bottom, var(--bg-card) 0%, var(--bg-card) 60%, rgba(59,130,246,0.1) 100%);
+}
+
+.cal-cell-empty.cal-has-range {
+    background: rgba(59,130,246,0.06);
 }
 
 .cal-range-label {
