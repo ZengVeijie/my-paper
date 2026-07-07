@@ -142,18 +142,22 @@ function render_calendar_html(array $cal, int $year, int $month): string {
             $h .= '</div>';
         }
 
-        // task badges
+        // task items
         $todos = $cell['tasks'];
         if ($todos) {
-            $pending = count(array_filter($todos, fn($t) => !$t['done']));
-            $done = count(array_filter($todos, fn($t) => $t['done']));
             $h .= '<div class="cal-tasks">';
-            if ($pending > 0) {
-                $titles = implode("\n", array_map(fn($t) => h($t['done'] ? '✓ ' . $t['text'] : '◻ ' . $t['text']), $todos));
-                $h .= '<span class="cal-task-badge cal-task-pending" title="' . h($titles) . '">' . $pending . '</span>';
+            $max_show = 4;
+            $shown = 0;
+            foreach ($todos as $task) {
+                if ($shown >= $max_show) break;
+                $cls = $task['done'] ? 'cal-task-item done' : 'cal-task-item';
+                $prefix = $task['done'] ? '&#10003; ' : '&#9711; ';
+                $h .= '<span class="' . $cls . '" title="' . h($task['article_title']) . '">' . $prefix . h($task['text']) . '</span>';
+                $shown++;
             }
-            if ($done > 0) {
-                $h .= '<span class="cal-task-badge cal-task-done" title="">' . $done . '</span>';
+            $remaining = count($todos) - $max_show;
+            if ($remaining > 0) {
+                $h .= '<span class="cal-task-more">+' . $remaining . ' 项</span>';
             }
             $h .= '</div>';
         }

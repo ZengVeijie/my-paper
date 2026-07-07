@@ -3130,27 +3130,29 @@ select[multiple].ai-picker option:checked {
 
 .cal-tasks {
     display: flex;
-    gap: 4px;
+    flex-direction: column;
+    gap: 1px;
     margin-top: auto;
 }
 
-.cal-task-badge {
+.cal-task-item {
     font-size: 0.65rem;
-    padding: 1px 5px;
-    border-radius: 10px;
-    line-height: 1.4;
-    font-weight: 600;
-    cursor: default;
+    line-height: 1.35;
+    color: var(--text);
+    word-break: break-all;
+    overflow-wrap: break-word;
+    white-space: normal;
 }
 
-.cal-task-pending {
-    background: rgba(220, 53, 69, 0.15);
-    color: #dc3545;
+.cal-task-item.done {
+    color: var(--text-muted);
+    text-decoration: line-through;
 }
 
-.cal-task-done {
-    background: var(--accent-light, rgba(0, 123, 255, 0.12));
-    color: var(--accent);
+.cal-task-more {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    margin-top: 1px;
 }
 
 @media (max-width: 768px) {
@@ -3165,8 +3167,7 @@ select[multiple].ai-picker option:checked {
         font-size: 0.7rem;
         padding: 6px 2px;
     }
-    .cal-task-badge {
+    .cal-task-item {
         font-size: 0.6rem;
-        padding: 0 4px;
     }
 }
