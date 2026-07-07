@@ -63,6 +63,34 @@
             <button type="submit" class="btn btn-primary">保存</button>
         </form>
     </section>
+
+    <section class="settings-section">
+        <h2>编辑器模式</h2>
+        <p class="section-desc">极简模式：隐藏工具栏与侧边面板，仅保留标题和正文，一键切换原始/渲染视图，AI 助手仅在需要时唤出。</p>
+        <form id="editor-form" onsubmit="updatePages(event)">
+            <div class="field">
+                <div class="radio-group">
+                    <label class="radio-label"><input type="radio" name="editor_mode" value="default" <?= ($user['editor_mode'] ?? 'default') === 'default' ? 'checked' : '' ?>> 标准模式</label>
+                    <label class="radio-label"><input type="radio" name="editor_mode" value="minimal" <?= ($user['editor_mode'] ?? '') === 'minimal' ? 'checked' : '' ?>> 极简模式</label>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary">保存</button>
+        </form>
+    </section>
+
+    <section class="settings-section">
+        <h2>首页日历</h2>
+        <p class="section-desc">在首页顶部显示月度日历，查看文章写作日期和待办事项的截止日期分布</p>
+        <form id="calendar-form" onsubmit="updatePages(event)">
+            <div class="field">
+                <div class="radio-group">
+                    <label class="radio-label"><input type="radio" name="homepage_calendar" value="1" <?= !empty($user['homepage_calendar']) ? 'checked' : '' ?>> 显示</label>
+                    <label class="radio-label"><input type="radio" name="homepage_calendar" value="0" <?= empty($user['homepage_calendar']) ? 'checked' : '' ?>> 不显示（默认）</label>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary">保存</button>
+        </form>
+    </section>
 </div>
 
 <!-- 助手管理 -->
@@ -226,6 +254,7 @@
                     <span class="field-hint">AI 分析时使用的完整提示词，可直接编辑</span>
                 </label>
                 <textarea id="console-prompt" rows="10" style="width:100%;font-family:var(--font-ui);font-size:0.8rem;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);resize:vertical;margin-top:6px;" placeholder="AI 分析提示词将在此显示..."></textarea>
+                <div id="console-prompt-hint" style="margin-top:6px;font-size:0.75rem;color:var(--text-muted);line-height:1.6;"></div>
             </div>
 
             <div class="app-console-section">
@@ -286,7 +315,7 @@ window.addEventListener('pageshow', function(e) {
         var panel = document.getElementById('settings-apps');
         if (panel) panel.style.display = '';
         var btn = document.querySelector('.tab-btn[onclick*="apps"]');
-        if (btn) btn.classList.add('active');
+        if (btn) { btn.classList.add('active'); btn.scrollIntoView({behavior: 'smooth', block: 'nearest', inline: 'center'}); }
         // 冷加载时延迟 fetch，避免与其他资源（JS/CSS/字体）抢浏览器并发连接
         if (document.readyState === 'complete') {
             loadApps();
@@ -299,7 +328,12 @@ function switchSettingsTab(name, ev) {
     document.querySelectorAll('.admin-panel').forEach(p => p.style.display = 'none');
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.getElementById('settings-' + name).style.display = '';
-    ev.target.classList.add('active');
+    var activeBtn = ev && ev.target ? ev.target :
+        document.querySelector('.tab-btn[onclick*="' + name + '"]');
+    if (activeBtn) {
+        activeBtn.classList.add('active');
+        activeBtn.scrollIntoView({behavior: 'smooth', block: 'nearest', inline: 'center'});
+    }
     if (name === 'shares' && !sharesLoaded) { loadShares(); }
     if (name === 'assistant' && !templatesLoaded) { loadTemplates(); }
     if (name === 'apps' && !appsLoaded) { loadApps(); }
@@ -1007,6 +1041,7 @@ function renderConsoleOptions() {
     renderConsoleFeatures();
     renderConsoleLayouts();
     renderConsoleStyle();
+    updatePromptHint();
 }
 
 function renderConsoleInputTypes() {
@@ -1041,6 +1076,27 @@ function toggleInputType(value) {
         currentConsoleFeatures = currentConsoleFeatures.filter(function(f) { return f !== 'select_first'; });
     }
     renderConsoleOptions();
+    updatePromptHint();
+}
+
+function updatePromptHint() {
+    var hintEl = document.getElementById('console-prompt-hint');
+    if (!hintEl) return;
+    var placeholders = [];
+    if (currentConsoleInputTypes.indexOf('keyword') !== -1) placeholders.push('{{keyword}}');
+    if (currentConsoleInputTypes.indexOf('question') !== -1) placeholders.push('{{question}}');
+    if (currentConsoleInputTypes.indexOf('date_range') !== -1) {
+        placeholders.push('{{date_start}}');
+        placeholders.push('{{date_end}}');
+    }
+    if (currentConsoleInputTypes.indexOf('scope') !== -1 || currentConsoleInputTypes.indexOf('article_picker') !== -1 || currentConsoleInputTypes.indexOf('tag_filter') !== -1) {
+        if (placeholders.length === 0) placeholders.push('{{scope}}');
+    }
+    if (placeholders.length === 0) {
+        hintEl.innerHTML = '';
+    } else {
+        hintEl.innerHTML = '可用占位符：' + placeholders.map(function(p) { return '<code style="background:var(--bg);padding:1px 4px;border-radius:3px;">' + esc(p) + '</code>'; }).join(' ') + ' &mdash; 会被用户输入的实际值替换';
+    }
 }
 
 function renderConsoleFeatures() {

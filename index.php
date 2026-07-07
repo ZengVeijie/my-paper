@@ -19,6 +19,7 @@ require_once __DIR__ . '/lib/backup.php';
 require_once __DIR__ . '/lib/notifications.php';
 require_once __DIR__ . '/lib/ai.php';
 require_once __DIR__ . '/lib/insights_apps.php';
+require_once __DIR__ . '/lib/calendar.php';
 
 // Auto-detect subdirectory path from SCRIPT_NAME
 // e.g. /mypaper/index.php => BASE_PATH = /mypaper
@@ -53,6 +54,22 @@ $router->get('/', function() {
     $user = current_user();
     $mode = $user['homepage_mode'] ?? 'both';
 
+    // 日历
+    $show_calendar = !empty($user['homepage_calendar']);
+    $cal_data = null;
+    $cal_year = (int)date('Y');
+    $cal_month = (int)date('m');
+    if ($show_calendar) {
+        $cy = (int)($_GET['cal_year'] ?? 0);
+        $cm = (int)($_GET['cal_month'] ?? 0);
+        if ($cm >= 1 && $cm <= 12 && $cy >= 1970) {
+            $cal_year = $cy;
+            $cal_month = $cm;
+        }
+        $all_articles = get_user_articles_all($user['id']);
+        $cal_data = build_calendar_data($cal_year, $cal_month, $all_articles);
+    }
+
     // 加载合辑数据（当模式不为 articles_only 时）
     $collections = [];
     $search = trim($_GET['search'] ?? '');
@@ -76,6 +93,10 @@ $router->get('/', function() {
     }
 
     $GLOBALS['page_data']['homepage_mode'] = $mode;
+    $GLOBALS['page_data']['homepage_calendar'] = $show_calendar;
+    $GLOBALS['page_data']['calendar'] = $cal_data;
+    $GLOBALS['page_data']['cal_year'] = $cal_year;
+    $GLOBALS['page_data']['cal_month'] = $cal_month;
     $GLOBALS['page_data']['collections'] = $collections;
     render_page('home');
 });

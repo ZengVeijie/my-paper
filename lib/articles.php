@@ -565,6 +565,12 @@ function attach_author(array $article): array {
     return $article;
 }
 
+function get_user_articles_all(string $user_id): array {
+    $articles = json_list(DATA_DIR . '/articles');
+    $articles = array_filter($articles, fn($a) => ($a['user_id'] ?? '') === $user_id);
+    return array_values($articles);
+}
+
 function attach_task_stats(array $article): array {
     $content = $article['content'] ?? '';
     preg_match_all('/^\s*- \[([ x])\]/m', $content, $matches);

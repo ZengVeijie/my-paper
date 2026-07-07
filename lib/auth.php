@@ -272,6 +272,12 @@ function handle_update_profile(): void {
     if (isset($data['homepage_mode']) && in_array($data['homepage_mode'], ['both', 'articles_only', 'collections_only'])) {
         $user['homepage_mode'] = $data['homepage_mode'];
     }
+    if (isset($data['editor_mode']) && in_array($data['editor_mode'], ['default', 'minimal'])) {
+        $user['editor_mode'] = $data['editor_mode'];
+    }
+    if (isset($data['homepage_calendar'])) {
+        $user['homepage_calendar'] = (bool)$data['homepage_calendar'];
+    }
     if (!empty($data['new_password'])) {
         if (!password_verify($data['current_password'] ?? '', $user['password_hash'])) {
             json_response(['error' => '当前密码不正确'], 403);

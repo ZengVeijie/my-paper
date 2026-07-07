@@ -8,6 +8,10 @@ $homepage_mode = $homepage_mode ?? 'both';
 $collections = $collections ?? [];
 $show_collections = in_array($homepage_mode, ['both', 'collections_only']);
 $show_articles = in_array($homepage_mode, ['both', 'articles_only']);
+$homepage_calendar = $homepage_calendar ?? false;
+$calendar = $calendar ?? null;
+$cal_year = $cal_year ?? (int)date('Y');
+$cal_month = $cal_month ?? (int)date('m');
 ?>
 <div class="page-header">
     <h1>首页</h1>
@@ -24,6 +28,12 @@ $show_articles = in_array($homepage_mode, ['both', 'articles_only']);
         <?php endif; ?>
     </form>
 </div>
+
+<?php if (!empty($homepage_calendar) && !empty($calendar)): ?>
+<section class="home-section calendar-section">
+    <?= render_calendar_html($calendar, $cal_year, $cal_month) ?>
+</section>
+<?php endif; ?>
 
 <?php if ($show_collections): ?>
 <section class="home-section">
@@ -136,10 +146,18 @@ $show_articles = in_array($homepage_mode, ['both', 'articles_only']);
                         <?php $is_my = ($a['user_id'] ?? '') === current_user()['id']; ?>
                         <?php if ($is_my): ?>
                         <div class="article-actions">
-                            <a href="/edit/<?= h($a['id']) ?>" class="btn-text">编辑</a>
-                            <a href="/api/export/<?= h($a['id']) ?>" class="btn-text">导出 .md</a>
-                            <button class="btn-text" onclick="quickShare('<?= h($a['id']) ?>')">分享</button>
-                            <button class="btn-text btn-danger" onclick="deleteArticle('<?= h($a['id']) ?>')">删除</button>
+                            <a href="/edit/<?= h($a['id']) ?>" class="btn btn-sm btn-icon" title="编辑">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                            </a>
+                            <a href="/api/export/<?= h($a['id']) ?>" class="btn btn-sm btn-icon" title="导出 Markdown">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            </a>
+                            <button class="btn btn-sm btn-icon" onclick="quickShare('<?= h($a['id']) ?>')" title="分享">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                            </button>
+                            <button class="btn btn-sm btn-icon btn-danger" onclick="deleteArticle('<?= h($a['id']) ?>')" title="删除">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                            </button>
                         </div>
                         <?php else: ?>
                         <div class="article-actions">
@@ -175,15 +193,20 @@ $show_articles = in_array($homepage_mode, ['both', 'articles_only']);
     </div>
 <?php endif; ?>
 
-<!-- AI 回答弹窗 -->
+<!-- AI 问答弹窗 -->
 <div class="modal" id="ai-modal" style="display:none">
     <div class="modal-overlay" onclick="closeAIModal()"></div>
-    <div class="modal-card" style="max-width:640px;">
+    <div class="modal-card" style="max-width:640px;display:flex;flex-direction:column;max-height:85vh;">
         <h2 id="ai-modal-title">AI 回答</h2>
-        <div id="ai-modal-body" style="max-height:60vh;overflow-y:auto;font-size:0.9rem;line-height:1.8;white-space:pre-wrap;background:var(--bg);padding:16px;border-radius:var(--radius);margin:8px 0;">
-            <span style="color:var(--text-muted)">处理中...</span>
+        <div id="ai-modal-body" style="flex:1;min-height:0;overflow-y:auto;font-size:0.9rem;line-height:1.8;margin:8px 0;">
         </div>
         <div id="ai-modal-footer" style="font-size:0.75rem;color:var(--text-muted);"></div>
+        <div id="ai-follow-up" style="display:none;margin-top:8px;gap:6px;">
+            <input type="text" id="ai-follow-input" placeholder="继续追问..."
+                style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-ui);font-size:0.85rem;outline:none;"
+                onkeydown="if(event.key==='Enter')sendFollowUp()">
+            <button class="btn btn-sm btn-primary" onclick="sendFollowUp()">发送</button>
+        </div>
         <div class="modal-actions" style="margin-top:12px;">
             <button class="btn" onclick="closeAIModal()">关闭</button>
         </div>
@@ -236,40 +259,92 @@ function batchShare() {
     document.getElementById('share-modal').style.display = 'flex';
 }
 
+let _aiChatHistory = [];
+let _aiArticleIds = [];
+
 async function batchAskAI() {
     const ids = getSelectedIds();
     if (!ids.length) return;
     const question = prompt('向 AI 提问（将基于选中文章内容回答）：');
     if (!question || !question.trim()) return;
 
+    _aiArticleIds = ids;
+    _aiChatHistory = [];
+
     const modal = document.getElementById('ai-modal');
     const body = document.getElementById('ai-modal-body');
-    const footer = document.getElementById('ai-modal-footer');
     document.getElementById('ai-modal-title').textContent = 'AI 回答';
-    body.innerHTML = '<span style="color:var(--text-muted)">处理中...</span>';
-    footer.textContent = '';
+    document.getElementById('ai-modal-footer').textContent = '基于 ' + ids.length + ' 篇文章';
+    body.innerHTML = '';
     modal.style.display = 'flex';
+    document.getElementById('ai-follow-up').style.display = 'none';
+
+    await doAskAI(question.trim());
+}
+
+async function doAskAI(question) {
+    const body = document.getElementById('ai-modal-body');
+    const input = document.getElementById('ai-follow-input');
+    const followUp = document.getElementById('ai-follow-up');
+
+    // 显示用户问题
+    appendChatBubble('user', question);
+
+    // 显示加载状态
+    var loadingId = 'ai-loading-' + Date.now();
+    body.insertAdjacentHTML('beforeend', '<div id="' + loadingId + '" style="color:var(--text-muted);padding:8px 12px;font-size:0.85rem;">思考中...</div>');
+    body.scrollTop = body.scrollHeight;
+    if (input) input.value = '';
+    if (followUp) followUp.style.display = 'none';
 
     try {
         const resp = await fetch('/api/ai/query-articles', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            body: JSON.stringify({ article_ids: ids, question: question.trim() })
+            body: JSON.stringify({ article_ids: _aiArticleIds, question: question, history: _aiChatHistory })
         });
         const result = await resp.json();
+        var loadingEl = document.getElementById(loadingId);
+        if (loadingEl) loadingEl.remove();
+
         if (result.text || result.answer) {
-            body.textContent = result.text || result.answer;
-            footer.textContent = '基于 ' + ids.length + ' 篇文章';
+            var answer = result.text || result.answer;
+            _aiChatHistory.push({ role: 'user', content: question });
+            _aiChatHistory.push({ role: 'assistant', content: answer });
+            appendChatBubble('assistant', answer);
         } else if (result.error) {
-            body.innerHTML = '<span style="color:var(--danger)">错误: ' + esc(result.error) + '</span>';
+            appendChatBubble('system', '错误: ' + result.error);
         }
     } catch (err) {
-        body.innerHTML = '<span style="color:var(--danger)">请求失败: ' + esc(err.message) + '</span>';
+        var loadingEl2 = document.getElementById(loadingId);
+        if (loadingEl2) loadingEl2.remove();
+        appendChatBubble('system', '请求失败: ' + err.message);
     }
+
+    body.scrollTop = body.scrollHeight;
+    if (followUp) followUp.style.display = 'flex';
+    if (input) input.focus();
+}
+
+function appendChatBubble(role, text) {
+    var body = document.getElementById('ai-modal-body');
+    var bubble = document.createElement('div');
+    bubble.className = 'ai-chat-bubble ai-chat-' + role;
+    bubble.textContent = text;
+    body.appendChild(bubble);
+}
+
+function sendFollowUp() {
+    var input = document.getElementById('ai-follow-input');
+    var q = (input.value || '').trim();
+    if (!q) return;
+    doAskAI(q);
 }
 
 function closeAIModal() {
     document.getElementById('ai-modal').style.display = 'none';
+    _aiChatHistory = [];
+    _aiArticleIds = [];
 }
 
 </script>
