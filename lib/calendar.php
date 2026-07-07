@@ -265,16 +265,6 @@ function render_calendar_html(array $cal, int $year, int $month): string {
             $h .= '<span class="cal-holiday-label">' . h($holiday_label) . '</span>';
         }
 
-        // Range labels — clickable to toggle done/undone
-        foreach ($cell_ranges as $ri) {
-            $r = $ranges[$ri];
-            $r_start_d = (int)substr($r['date_start'], 8, 2);
-            $ci = $ri % count($colors);
-            $done_cls = $r['done'] ? ' done' : '';
-            $label = ($d === $r_start_d) ? h($r['text']) : '&nbsp;';
-            $h .= '<span class="cal-range-label' . $done_cls . '" style="background:' . $colors[$ci]['bar'] . ';" data-aid="' . h($r['article_id']) . '" data-li="' . $r['line_index'] . '" onclick="calToggleTask(this)" title="点击切换完成状态">' . $label . '</span>';
-        }
-
         // Article links
         $arts = $cell['articles'];
         if ($arts) {
@@ -285,20 +275,42 @@ function render_calendar_html(array $cal, int $year, int $month): string {
             $h .= '</div>';
         }
 
-        // Single-day task items (clickable to toggle)
-        $todos = $cell['tasks'];
-        if ($todos) {
+        // Unified task list: single-day todos + range tasks, identical UI
+        $all_tasks = [];
+        // Single-day tasks
+        foreach ($cell['tasks'] as $task) {
+            $all_tasks[] = [
+                'text' => $task['text'],
+                'done' => $task['done'],
+                'article_id' => $task['article_id'],
+                'line_index' => $task['line_index'],
+                'title' => $task['article_title'],
+            ];
+        }
+        // Range tasks (shown on every day, same format)
+        foreach ($cell_ranges as $ri) {
+            $r = $ranges[$ri];
+            $all_tasks[] = [
+                'text' => $r['text'],
+                'done' => $r['done'],
+                'article_id' => $r['article_id'],
+                'line_index' => $r['line_index'],
+                'title' => $r['article_title'],
+            ];
+        }
+
+        if ($all_tasks) {
             $h .= '<div class="cal-tasks">';
-            $max_show = 3;
+            $max_show = 4;
             $shown = 0;
-            foreach ($todos as $task) {
+            foreach ($all_tasks as $task) {
                 if ($shown >= $max_show) break;
                 $cls = $task['done'] ? 'cal-task-item done' : 'cal-task-item';
                 $prefix = $task['done'] ? '&#10003; ' : '&#9711; ';
-                $h .= '<span class="' . $cls . '" data-aid="' . h($task['article_id']) . '" data-li="' . $task['line_index'] . '" onclick="calToggleTask(this)" title="' . h($task['article_title']) . ' — 点击切换完成状态">' . $prefix . h($task['text']) . '</span>';
+                $h .= '<span class="' . $cls . '" data-aid="' . h($task['article_id']) . '" data-li="' . $task['line_index'] . '" onclick="calToggleTask(this)" title="' . h($task['title']) . ' — 点击切换完成状态">' . $prefix . h($task['text']) . '</span>';
                 $shown++;
             }
-            $remaining = count($todos) - $max_show;
+            $remaining = count($all_tasks) - $max_show;
             if ($remaining > 0) {
                 $h .= '<span class="cal-task-more">+' . $remaining . ' 项</span>';
             }
