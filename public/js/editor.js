@@ -415,26 +415,43 @@ function getCurrentLine(textarea) {
     return textarea.value.substring(lineStart, cursor + lineEnd);
 }
 
+function stripDueMarker(line) {
+    return line.replace(/\s*@due\([^)]+\)/, '').replace(/\s*\(完成于.*?\)$/, '').trim();
+}
+
 function showDuePicker(textarea) {
     _dueTextarea = textarea;
     var popover = document.getElementById('due-date-popover');
     var btn = textarea.parentNode.querySelector('[data-action="due"]');
     if (!popover || !btn) return;
 
-    // Pre-fill with existing @due if cursor is on a checklist line with one
     var line = getCurrentLine(textarea);
-    var m = line.match(/@due\((\d{4}-\d{2}-\d{2})/);
-    var dateInput = document.getElementById('due-date-input');
-    dateInput.value = m ? m[1] : '';
+    var isChecklist = /^\s*- \[[ x]\]/.test(line);
+    var dueMatch = line.match(/@due\((\d{4}-\d{2}-\d{2})(?:~(\d{4}-\d{2}-\d{2}))?\)/);
+
+    // Pre-fill task name: from checklist text, or selected text, empty otherwise
+    var taskInput = document.getElementById('due-task-name');
+    if (isChecklist) {
+        taskInput.value = stripDueMarker(line.replace(/^\s*- \[[ x]\]\s*/, ''));
+    } else {
+        taskInput.value = '';
+    }
+
+    // Pre-fill dates from existing @due or today
+    var today = new Date().toISOString().slice(0, 10);
+    document.getElementById('due-date-start').value = dueMatch ? dueMatch[1] : today;
+    document.getElementById('due-date-end').value = dueMatch && dueMatch[2] ? dueMatch[2] : '';
+    document.getElementById('due-date-range-toggle').checked = !!(dueMatch && dueMatch[2]);
+    document.getElementById('due-date-end-wrap').style.display = (dueMatch && dueMatch[2]) ? '' : 'none';
 
     // Position popover below the button
     var rect = btn.getBoundingClientRect();
     popover.style.top = (rect.bottom + 4) + 'px';
-    popover.style.left = Math.min(rect.left, window.innerWidth - 320) + 'px';
+    popover.style.left = Math.min(rect.left, window.innerWidth - 280) + 'px';
     popover.style.display = 'block';
 
-    dateInput.focus();
-    dateInput.onkeydown = function(e) {
+    taskInput.focus();
+    taskInput.onkeydown = function(e) {
         if (e.key === 'Enter') insertDueDate();
         if (e.key === 'Escape') popover.style.display = 'none';
     };
@@ -442,6 +459,11 @@ function showDuePicker(textarea) {
     setTimeout(function() {
         document.addEventListener('click', closeDuePopoverOnClickOutside);
     }, 0);
+}
+
+function toggleDueDateRange() {
+    var wrap = document.getElementById('due-date-end-wrap');
+    wrap.style.display = document.getElementById('due-date-range-toggle').checked ? '' : 'none';
 }
 
 function closeDuePopoverOnClickOutside(e) {
@@ -457,9 +479,15 @@ function closeDuePopoverOnClickOutside(e) {
 }
 
 function insertDueDate() {
-    var dateInput = document.getElementById('due-date-input');
-    var dateStr = dateInput.value;
-    if (!dateStr || !_dueTextarea) return;
+    var taskName = document.getElementById('due-task-name').value.trim();
+    var dateStart = document.getElementById('due-date-start').value;
+    var dateEnd = document.getElementById('due-date-end').value;
+    var isRange = document.getElementById('due-date-range-toggle').checked;
+    if (!dateStart || !_dueTextarea) return;
+    if (!taskName) taskName = '待办事项';
+
+    var dueStr = isRange && dateEnd ? '@due(' + dateStart + '~' + dateEnd + ')' : '@due(' + dateStart + ')';
+    var fullLine = '- [ ] ' + taskName + ' ' + dueStr;
 
     var ta = _dueTextarea;
     var cursor = ta.selectionStart;
@@ -470,26 +498,27 @@ function insertDueDate() {
     if (lineEnd === -1) lineEnd = ta.value.length;
 
     var line = ta.value.substring(lineStart, lineEnd);
-    // Only operate on checklist lines
-    if (!/^\s*- \[[ x]\]/.test(line)) {
-        document.getElementById('due-date-popover').style.display = 'none';
-        return;
-    }
-
-    var newLine;
-    var newMarker = '@due(' + dateStr + ')';
-    if (/@due\([^)]+\)/.test(line)) {
-        newLine = line.replace(/@due\([^)]+\)/, newMarker);
+    var newVal;
+    if (/^\s*- \[[ x]\]/.test(line)) {
+        // Replace existing checklist line
+        newVal = ta.value.substring(0, lineStart) + fullLine + ta.value.substring(lineEnd);
     } else {
-        // strip existing (完成于...) before appending
-        var stripped = line.replace(/\s*\(完成于.*?\)$/, '');
-        newLine = stripped + ' ' + newMarker;
+        // Insert new line at cursor
+        var insertAt = lineStart;
+        if (cursor > lineStart && line.trim() !== '') {
+            fullLine = '\n' + fullLine;
+            if (lineEnd < ta.value.length && ta.value.charAt(lineEnd) !== '\n') {
+                fullLine = '\n' + fullLine + '\n';
+            }
+            insertAt = lineEnd + (ta.value.charAt(lineEnd) === '\n' ? 1 : 0);
+        } else {
+            fullLine = fullLine + '\n';
+        }
+        newVal = ta.value.substring(0, insertAt) + fullLine + ta.value.substring(insertAt);
     }
 
-    var newVal = ta.value.substring(0, lineStart) + newLine + ta.value.substring(lineEnd);
     ta.value = newVal;
     ta.focus();
-    ta.selectionStart = ta.selectionEnd = lineStart + newLine.length;
     document.getElementById('due-date-popover').style.display = 'none';
     _dueTextarea = null;
 }

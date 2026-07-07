@@ -173,7 +173,7 @@ $editor_mode = $user['editor_mode'] ?? 'default';
                 <button type="button" data-action="ul" title="无序列表">&bull;</button>
                 <button type="button" data-action="ol" title="有序列表">1.</button>
                 <button type="button" data-action="checklist" title="任务清单">☑</button>
-                <button type="button" data-action="due" title="为任务添加截止日期 @due(YYYY-MM-DD)" style="font-size:0.78rem;">📅</button>
+                <button type="button" data-action="due" title="为任务添加截止日期（支持多天范围）">截止日</button>
                 <span class="toolbar-sep"></span>
                 <button type="button" data-action="link" title="链接">&#x1f517;</button>
                 <button type="button" data-action="image" title="图片">&#x1f5bc;</button>
@@ -190,11 +190,29 @@ $editor_mode = $user['editor_mode'] ?? 'default';
                 <span class="toolbar-sep"></span>
                 <button type="button" id="crop-btn" title="裁剪图片">&nbsp;✂&nbsp;</button>
                 <span class="toolbar-sep"></span>
-                <div id="due-date-popover" style="display:none;position:absolute;z-index:1000;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px;box-shadow:0 4px 16px rgba(0,0,0,0.15);">
-                    <div style="display:flex;gap:6px;align-items:center;">
-                        <input type="date" id="due-date-input" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:0.85rem;font-family:var(--font-ui);">
-                        <button type="button" class="btn btn-sm btn-primary" onclick="insertDueDate()">确定</button>
-                        <button type="button" class="btn btn-sm" onclick="document.getElementById('due-date-popover').style.display='none'">取消</button>
+                <div id="due-date-popover" style="display:none;position:absolute;z-index:1000;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px;box-shadow:0 4px 16px rgba(0,0,0,0.15);min-width:260px;">
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                        <label style="display:flex;flex-direction:column;gap:2px;font-size:0.8rem;color:var(--text-muted);">
+                            任务
+                            <input type="text" id="due-task-name" placeholder="任务名称" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:0.85rem;font-family:var(--font-ui);">
+                        </label>
+                        <label style="display:flex;flex-direction:column;gap:2px;font-size:0.8rem;color:var(--text-muted);">
+                            开始日期
+                            <input type="date" id="due-date-start" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:0.85rem;font-family:var(--font-ui);">
+                        </label>
+                        <label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--text-muted);cursor:pointer;">
+                            <input type="checkbox" id="due-date-range-toggle" onchange="toggleDueDateRange()"> 跨天任务（设置结束日期）
+                        </label>
+                        <div id="due-date-end-wrap" style="display:none;">
+                            <label style="display:flex;flex-direction:column;gap:2px;font-size:0.8rem;color:var(--text-muted);">
+                                结束日期
+                                <input type="date" id="due-date-end" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:0.85rem;font-family:var(--font-ui);">
+                            </label>
+                        </div>
+                        <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:4px;">
+                            <button type="button" class="btn btn-sm" onclick="document.getElementById('due-date-popover').style.display='none'">取消</button>
+                            <button type="button" class="btn btn-sm btn-primary" onclick="insertDueDate()">插入</button>
+                        </div>
                     </div>
                 </div>
                 <button type="button" id="upload-btn" title="上传图片或文件（也可直接拖拽到编辑器或粘贴图片）" class="editor-toolbar-upload">
