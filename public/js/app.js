@@ -963,56 +963,114 @@ function closeLightbox() {
     if (lb) lb.classList.remove('open');
 }
 
-// ===== 日历交互：快速添加待办 + 切换完成状态 =====
+// ===== 日历交互：Ctrl+多选跨日待办 / 单击单日待办 / 切换完成状态 =====
 
-function calQuickAdd(e, dateStr) {
-    e.stopPropagation();
-    // Remove any existing popover
+var calSelectedDates = [];
+
+function clearCalSelection() {
+    calSelectedDates = [];
+    document.querySelectorAll('.cal-cell.cal-selected').forEach(function(el) { el.classList.remove('cal-selected'); });
+}
+
+function updateCalSelectionHighlight() {
+    document.querySelectorAll('.cal-cell').forEach(function(el) {
+        var dd = el.dataset.date;
+        if (dd && calSelectedDates.indexOf(dd) >= 0) {
+            el.classList.add('cal-selected');
+        } else {
+            el.classList.remove('cal-selected');
+        }
+    });
+}
+
+function showCalPopover(e, dateStr, dateEnd) {
     var existing = document.getElementById('cal-quick-add');
     if (existing) existing.remove();
 
+    var isRange = !!dateEnd;
     var pop = document.createElement('div');
     pop.id = 'cal-quick-add';
     pop.className = 'cal-quick-add';
-    pop.innerHTML = '<input type="text" id="cal-quick-input" placeholder="待办事项..."><button type="button" class="btn btn-sm btn-primary" id="cal-quick-btn">添加</button>';
+
+    var headerHtml = '';
+    if (isRange) {
+        headerHtml = '<div class="cal-quick-range">' + dateStr + ' ~ ' + dateEnd + '</div>';
+    } else {
+        headerHtml = '<div class="cal-quick-range cal-quick-single">' + dateStr + '</div>';
+    }
+
+    pop.innerHTML = headerHtml +
+        '<input type="text" id="cal-quick-input" placeholder="' + (isRange ? '跨日待办...' : '待办事项...') + '">' +
+        '<button type="button" class="btn btn-sm btn-primary" id="cal-quick-btn">添加</button>';
     document.body.appendChild(pop);
 
     var rect = e.target.getBoundingClientRect();
     pop.style.top = (rect.bottom + 4) + 'px';
-    pop.style.left = Math.min(rect.left, window.innerWidth - 240) + 'px';
+    pop.style.left = Math.min(rect.left, window.innerWidth - 260) + 'px';
     pop.style.display = 'flex';
 
     var input = document.getElementById('cal-quick-input');
     input.focus();
-    input.dataset.date = dateStr;
 
     var add = function() {
         var task = input.value.trim();
-        if (!task) { pop.remove(); return; }
+        if (!task) { pop.remove(); clearCalSelection(); return; }
         var btn = document.getElementById('cal-quick-btn');
         btn.disabled = true;
         btn.textContent = '...';
+        var body = { task: task, date: dateStr };
+        if (isRange) body.date_end = dateEnd;
         fetch('/api/calendar/add-todo', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            body: JSON.stringify({ task: task, date: input.dataset.date })
+            body: JSON.stringify(body)
         }).then(function(r) { return r.json(); }).then(function(data) {
             if (data.ok) location.reload();
-            else { alert(data.error || '添加失败'); pop.remove(); }
-        }).catch(function() { pop.remove(); });
+            else { alert(data.error || '添加失败'); pop.remove(); clearCalSelection(); }
+        }).catch(function() { pop.remove(); clearCalSelection(); });
     };
 
-    input.onkeydown = function(ev) { if (ev.key === 'Enter') add(); if (ev.key === 'Escape') pop.remove(); };
+    input.onkeydown = function(ev) { if (ev.key === 'Enter') add(); if (ev.key === 'Escape') { pop.remove(); clearCalSelection(); } };
     document.getElementById('cal-quick-btn').onclick = add;
 
     setTimeout(function() {
         document.addEventListener('click', function closePop(ev) {
             if (!pop.contains(ev.target) && ev.target !== e.target) {
                 pop.remove();
+                clearCalSelection();
                 document.removeEventListener('click', closePop);
             }
         });
     }, 0);
+}
+
+function calQuickAdd(e, dateStr) {
+    e.stopPropagation();
+
+    if (e.ctrlKey || e.metaKey) {
+        var idx = calSelectedDates.indexOf(dateStr);
+        if (idx >= 0) {
+            calSelectedDates.splice(idx, 1);
+        } else {
+            calSelectedDates.push(dateStr);
+        }
+        calSelectedDates.sort();
+        updateCalSelectionHighlight();
+
+        if (calSelectedDates.length >= 2) {
+            showCalPopover(e, calSelectedDates[0], calSelectedDates[calSelectedDates.length - 1]);
+        } else if (calSelectedDates.length === 1) {
+            showCalPopover(e, calSelectedDates[0], null);
+        } else {
+            var existing = document.getElementById('cal-quick-add');
+            if (existing) existing.remove();
+        }
+        return;
+    }
+
+    // Regular click: clear multi-select, show single-date popover
+    clearCalSelection();
+    showCalPopover(e, dateStr, null);
 }
 
 async function calToggleTask(el) {
@@ -1034,11 +1092,16 @@ async function calToggleTask(el) {
     }
 }
 
-// 关闭日历弹窗的全局点击
+// 关闭日历弹窗/清除多选的全局点击
 document.addEventListener('click', function(e) {
     var pop = document.getElementById('cal-quick-add');
     if (pop && !pop.contains(e.target) && !e.target.classList.contains('cal-day')) {
         pop.remove();
+        clearCalSelection();
+    }
+    // Click outside calendar clears multi-select
+    if (!e.target.closest('.calendar-grid') && !e.ctrlKey && !e.metaKey) {
+        clearCalSelection();
     }
 });
 

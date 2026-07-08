@@ -271,8 +271,12 @@ $router->post('/api/calendar/add-todo', function() {
     $data = body_json();
     $task = trim($data['task'] ?? '');
     $date = trim($data['date'] ?? '');
+    $date_end = trim($data['date_end'] ?? '');
     if ($task === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
         json_response(['error' => '参数无效'], 400);
+    }
+    if ($date_end !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_end)) {
+        json_response(['error' => '结束日期无效'], 400);
     }
 
     // Find or create "待办清单" article
@@ -306,7 +310,8 @@ $router->post('/api/calendar/add-todo', function() {
     // Append new todo
     $content = $todo_article['content'] ?? '';
     if ($content !== '' && substr($content, -1) !== "\n") $content .= "\n";
-    $content .= '- [ ] ' . $task . ' @due(' . $date . ')' . "\n";
+    $due = ($date_end !== '' && $date_end !== $date) ? ($date . '~' . $date_end) : $date;
+    $content .= '- [ ] ' . $task . ' @due(' . $due . ')' . "\n";
     $todo_article['content'] = $content;
     $todo_article['updated_at'] = date('c');
 
